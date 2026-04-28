@@ -1,0 +1,31 @@
+{
+  "course_name": "COMP3251 - Algorithm Design",
+  "questions": [
+    {
+      "id": 1,
+      "type": "MCQ",
+      "question": "What is the time complexity of Prim's Algorithm using a Binary Heap?",
+      "options": {
+        "A": "O(V^2)",
+        "B": "O(E log V)",
+        "C": "O(E + V log V)",
+        "D": "O(V log E)"
+      },
+      "answer": "B",
+      "explanation": "Using a binary heap, each edge relaxation takes O(log V) time, and there are E relaxations."
+    },
+    {
+      "id": 2,
+      "type": "MCQ",
+      "question": "In a greedy algorithm, what property must hold for local choices to lead to an optimal global solution?",
+      "options": {
+        "A": "Optimal substructure only",
+        "B": "No overlapping subproblems",
+        "C": "Greedy choice property and optimal substructure",
+        "D": "Randomized tie-breaking"
+      },
+      "answer": "C",
+      "explanation": "A greedy algorithm is correct when it has both the greedy choice property and optimal substructure."
+    }
+  ]
+}
