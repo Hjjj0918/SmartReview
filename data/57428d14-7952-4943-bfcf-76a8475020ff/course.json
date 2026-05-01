@@ -1,0 +1,273 @@
+{
+  "schema_version": 2,
+  "course_id": "57428d14-7952-4943-bfcf-76a8475020ff",
+  "course_name": "ACCT1101",
+  "chapters": [
+    {
+      "chapter_id": "53fb27d5-9a49-4192-bbd2-ba96955272ec",
+      "chapter_title": "Investing and Financing Decisions and the Accounting System",
+      "questions": [
+        {
+          "id": 1,
+          "type": "MCQ",
+          "question": "What is the primary objective of financial reporting according to the conceptual framework?",
+          "options": {
+            "A": "To provide financial information that is useful to existing and potential investors, lenders, and other creditors in making decisions about providing resources to the entity.",
+            "B": "To maximize the company's reported net income.",
+            "C": "To ensure that all transactions are recorded at fair market value.",
+            "D": "To minimize the company's tax liability."
+          },
+          "answer": "A",
+          "explanation": "The lecture notes state that the objective of financial reporting is 'to provide financial information about the reporting entity that is useful to existing and potential investors, lenders, and other creditors in making decisions about providing resources to the entity.' (Slide 2-5)"
+        },
+        {
+          "id": 2,
+          "type": "MCQ",
+          "question": "Which of the following best defines an asset as used in the balance sheet?",
+          "options": {
+            "A": "Economic resources with probable future benefits owned or controlled by the entity.",
+            "B": "Debts or obligations that result from past transactions.",
+            "C": "The financing provided by the owners and operations of the business.",
+            "D": "Cash and cash equivalents only."
+          },
+          "answer": "A",
+          "explanation": "According to the notes, assets are 'economic resources with probable future benefits owned or controlled by the entity.' (Slide 2-7)"
+        },
+        {
+          "id": 3,
+          "type": "MCQ",
+          "question": "Which of the following is a characteristic of a liability?",
+          "options": {
+            "A": "It represents economic resources with future benefits.",
+            "B": "It is a debt or obligation that results from a company's past transactions and will be paid with assets or services.",
+            "C": "It is the residual interest in the assets after deducting liabilities.",
+            "D": "It is a type of equity financing."
+          },
+          "answer": "B",
+          "explanation": "The notes define liabilities as 'debts or obligations (claims to a company's resources) that result from a company's past transactions and will be paid with assets or services.' (Slide 2-7)"
+        },
+        {
+          "id": 4,
+          "type": "MCQ",
+          "question": "According to the accounting equation, if a company's total assets increase by $50,000 and total liabilities increase by $20,000, what is the change in stockholders' equity?",
+          "options": {
+            "A": "Increase of $30,000",
+            "B": "Increase of $70,000",
+            "C": "Decrease of $30,000",
+            "D": "No change"
+          },
+          "answer": "A",
+          "explanation": "The accounting equation is Assets = Liabilities + Stockholders' Equity. If assets increase by $50,000 and liabilities increase by $20,000, then stockholders' equity must increase by $30,000 ($50,000 - $20,000) to keep the equation balanced. This is demonstrated in the transaction analysis examples in the notes (e.g., Slide 2-22)."
+        },
+        {
+          "id": 5,
+          "type": "MCQ",
+          "question": "On a classified balance sheet, current assets are defined as:",
+          "options": {
+            "A": "Assets that will be used or turned into cash within the upcoming year.",
+            "B": "Assets that will last longer than one year.",
+            "C": "Assets that are intangible, such as patents and trademarks.",
+            "D": "Assets that are financed by long-term debt."
+          },
+          "answer": "A",
+          "explanation": "The lecture notes state: 'Current assets are those to be used or turned into cash within the upcoming year.' (Slide 2-8)"
+        },
+        {
+          "id": 6,
+          "type": "MCQ",
+          "question": "Which of the following is true regarding internally developed intangible assets, such as trademarks or patents?",
+          "options": {
+            "A": "They are always reported on the balance sheet at fair value.",
+            "B": "They are not reported on the balance sheet because they were developed internally, not purchased.",
+            "C": "They are reported as liabilities.",
+            "D": "They are reported as current assets."
+          },
+          "answer": "B",
+          "explanation": "The notes explain that many very valuable intangible assets developed inside a company (not purchased) are not reported on the balance sheet. Examples include the GE trademark and Coca-Cola's patented formula (Slide 2-10)."
+        },
+        {
+          "id": 7,
+          "type": "MCQ",
+          "question": "Which of the following accounts is always a liability?",
+          "options": {
+            "A": "Prepaid Expenses",
+            "B": "Accounts Receivable",
+            "C": "Unearned Revenue",
+            "D": "Common Stock"
+          },
+          "answer": "C",
+          "explanation": "The notes explicitly state: 'Accounts with “unearned” in the title are always liabilities representing amounts paid in the past to the company by others who expect future goods or services.' (Slide 2-16)"
+        },
+        {
+          "id": 8,
+          "type": "MCQ",
+          "question": "If a company issues 1,000 shares of common stock with a par value of $0.10 per share at a market price of $5 per share, what is the amount credited to Additional Paid-in Capital?",
+          "options": {
+            "A": "$100",
+            "B": "$4,900",
+            "C": "$5,000",
+            "D": "$0"
+          },
+          "answer": "B",
+          "explanation": "Additional Paid-in Capital is the excess amount over par value. Par value = 1,000 × $0.10 = $100. Total received = 1,000 × $5 = $5,000. Additional Paid-in Capital = $5,000 - $100 = $4,900. This is consistent with the example in the notes (Slide 2-22)."
+        },
+        {
+          "id": 9,
+          "type": "MCQ",
+          "question": "In transaction analysis, which of the following steps should be performed first?",
+          "options": {
+            "A": "Verify that the accounting equation is in balance.",
+            "B": "Identify which accounts are affected and whether they increase or decrease.",
+            "C": "Record the journal entry.",
+            "D": "Post the entry to the general ledger."
+          },
+          "answer": "B",
+          "explanation": "The notes describe the steps: Step 1: Ask which accounts are affected, what category they belong to, and the direction of effect. Step 2: Verify the equation is in balance. Journalizing and posting come later (Slides 2-19, 2-20)."
+        },
+        {
+          "id": 10,
+          "type": "MCQ",
+          "question": "When recording a journal entry, which of the following is correct?",
+          "options": {
+            "A": "Debited accounts are listed first and indented; credited accounts are listed after and not indented.",
+            "B": "Debited accounts are listed first and not indented; credited accounts are listed after and usually indented.",
+            "C": "Credited accounts are listed first and indented; debited accounts are listed after.",
+            "D": "There is no specific order; accounts can be listed in any order."
+          },
+          "answer": "B",
+          "explanation": "The notes illustrate that in a journal entry, debited accounts are on top and credited accounts are on bottom, usually indented (Slide 2-39)."
+        },
+        {
+          "id": 11,
+          "type": "MCQ",
+          "question": "In a T-account, what is the normal balance for an asset account?",
+          "options": {
+            "A": "Debit",
+            "B": "Credit",
+            "C": "Either debit or credit depending on the transaction",
+            "D": "There is no normal balance"
+          },
+          "answer": "A",
+          "explanation": "The notes show that assets have a normal debit balance. The transaction analysis model indicates assets increase with debits (left side) and decrease with credits (Slide 2-37)."
+        },
+        {
+          "id": 12,
+          "type": "MCQ",
+          "question": "What is the primary purpose of preparing a trial balance?",
+          "options": {
+            "A": "To ensure that all transactions have been recorded.",
+            "B": "To verify that total debits equal total credits.",
+            "C": "To calculate net income for the period.",
+            "D": "To prepare the balance sheet."
+          },
+          "answer": "B",
+          "explanation": "The notes state: 'The purpose of the trial balance is to make sure the debits and credits are equal.' (Slide 2-49)"
+        },
+        {
+          "id": 13,
+          "type": "MCQ",
+          "question": "The current ratio is computed as:",
+          "options": {
+            "A": "Current Liabilities divided by Current Assets.",
+            "B": "Current Assets divided by Current Liabilities.",
+            "C": "Total Assets divided by Total Liabilities.",
+            "D": "Cash divided by Current Liabilities."
+          },
+          "answer": "B",
+          "explanation": "The notes provide the formula: Current Ratio = Current Assets / Current Liabilities (Slide 2-54)."
+        },
+        {
+          "id": 14,
+          "type": "MCQ",
+          "question": "A company's current ratio is 2.5. This indicates that:",
+          "options": {
+            "A": "The company has $2.50 of current assets for every $1.00 of current liabilities.",
+            "B": "The company has $2.50 of current liabilities for every $1.00 of current assets.",
+            "C": "The company is likely to default on its short-term obligations.",
+            "D": "The company's long-term debt is too high."
+          },
+          "answer": "A",
+          "explanation": "The current ratio measures a company's ability to pay short-term debt. A ratio of 2.5 means current assets are 2.5 times current liabilities. The notes discuss using the ratio to assess liquidity (Slide 2-54)."
+        },
+        {
+          "id": 15,
+          "type": "MCQ",
+          "question": "Which accounting assumption states that a business is considered a separate entity from its owners?",
+          "options": {
+            "A": "Going Concern",
+            "B": "Separate Entity",
+            "C": "Monetary Unit",
+            "D": "Time Period"
+          },
+          "answer": "B",
+          "explanation": "The notes list 'Assumptions: Separate Entity, Going Concern, and Monetary Unit' under Recognition, Measurement, and Disclosure Concepts (Slide 2-5)."
+        },
+        {
+          "id": 16,
+          "type": "MCQ",
+          "question": "The assumption that a company will continue to operate indefinitely is called the:",
+          "options": {
+            "A": "Monetary Unit assumption.",
+            "B": "Separate Entity assumption.",
+            "C": "Going Concern assumption.",
+            "D": "Time Period assumption."
+          },
+          "answer": "C",
+          "explanation": "The notes list 'Going Concern' as one of the key assumptions, which implies the business will continue to operate (Slide 2-5)."
+        },
+        {
+          "id": 17,
+          "type": "MCQ",
+          "question": "According to the notes, which of the following is an example of off-balance-sheet financing?",
+          "options": {
+            "A": "Purchasing equipment by signing a long-term note payable.",
+            "B": "Issuing common stock to investors.",
+            "C": "Renting facilities under an operating lease that is not recorded as a liability.",
+            "D": "Paying off accounts payable."
+          },
+          "answer": "C",
+          "explanation": "The notes discuss off-balance-sheet financing, mentioning that 'renting facilities or equipment can fall into this category' and that Delta Air Lines had significant future cash flows from aircraft rental leases not reported as debt (Slide 2-11)."
+        },
+        {
+          "id": 18,
+          "type": "MCQ",
+          "question": "In the accounting cycle, what is the correct order after analyzing transactions?",
+          "options": {
+            "A": "Post entries, journalize, prepare trial balance, adjust.",
+            "B": "Journalize, post entries, prepare trial balance, adjust.",
+            "C": "Prepare trial balance, journalize, post entries, adjust.",
+            "D": "Adjust, journalize, post entries, prepare trial balance."
+          },
+          "answer": "B",
+          "explanation": "The accounting cycle shown in Exhibit 2.4 lists: 1. Analyze transactions; 2. Record journal entries; 3. Post entries to ledger; 4. Prepare trial balance; 5. Adjust (Slide 2-31)."
+        },
+        {
+          "id": 19,
+          "type": "MCQ",
+          "question": "When Chipotle paid $1 on a short-term note payable (transaction d), what was the effect on the accounting equation?",
+          "options": {
+            "A": "Assets decreased and liabilities decreased.",
+            "B": "Assets increased and liabilities increased.",
+            "C": "Assets decreased and stockholders' equity decreased.",
+            "D": "Liabilities decreased and stockholders' equity increased."
+          },
+          "answer": "A",
+          "explanation": "The notes show: Cash (asset) decreased by $1, and Short-Term Notes Payable (liability) decreased by $1. The equation remains balanced: Assets –$1 = Liabilities –$1 + Equity $0 (Slide 2-25)."
+        },
+        {
+          "id": 20,
+          "type": "MCQ",
+          "question": "Which of the following accounts would be classified as a current liability on a classified balance sheet?",
+          "options": {
+            "A": "Notes Payable due in 5 years",
+            "B": "Common Stock",
+            "C": "Accounts Payable",
+            "D": "Retained Earnings"
+          },
+          "answer": "C",
+          "explanation": "Accounts Payable is typically a current liability because it represents amounts owed to suppliers that are usually paid within the year. The notes list Accounts Payable as a liability (Slide 2-16) and define current liabilities as those to be paid within 12 months (Slide 2-8)."
+        }
+      ]
+    }
+  ]
+}

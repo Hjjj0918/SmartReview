@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import type { CourseData, Question, AnswerKey, AnswerRecord, QuizStats } from '../types';
+import type { QuizSource, Question, AnswerKey, AnswerRecord, QuizStats } from '../types';
 
 export interface QuizState {
   currentIndex: number;
@@ -19,13 +19,24 @@ export interface QuizActions {
   reset: () => void;
 }
 
-export function useQuiz(course: CourseData): {
+const EMPTY_QUESTION: Question = {
+  id: 0,
+  type: 'MCQ',
+  question: '',
+  options: { A: '', B: '', C: '', D: '' },
+  answer: 'A',
+  explanation: '',
+};
+
+export function useQuiz(source: QuizSource): {
   state: QuizState;
   currentQuestion: Question;
   progress: number;
   stats: QuizStats | null;
   actions: QuizActions;
 } {
+  const questions = source.questions;
+
   const [quizState, setQuizState] = useState<QuizState>({
     currentIndex: 0,
     selectedAnswer: null,
@@ -38,13 +49,20 @@ export function useQuiz(course: CourseData): {
   });
 
   const currentQuestion = useMemo(
-    () => course.questions[quizState.currentIndex],
-    [course.questions, quizState.currentIndex]
+    () => questions[quizState.currentIndex] ?? EMPTY_QUESTION,
+    [questions, quizState.currentIndex]
   );
 
   const progress = useMemo(
-    () => ((quizState.currentIndex + (quizState.isSubmitted ? 1 : 0)) / course.questions.length) * 100,
-    [quizState.currentIndex, quizState.isSubmitted, course.questions.length]
+    () => {
+      if (questions.length === 0) return 0;
+      return (
+        ((quizState.currentIndex + (quizState.isSubmitted ? 1 : 0)) /
+          questions.length) *
+        100
+      );
+    },
+    [quizState.currentIndex, quizState.isSubmitted, questions.length]
   );
 
   const stats = useMemo((): QuizStats | null => {
@@ -69,7 +87,9 @@ export function useQuiz(course: CourseData): {
   const submitAnswer = useCallback(() => {
     setQuizState((prev) => {
       if (prev.isSubmitted || prev.selectedAnswer === null) return prev;
-      const isCorrect = prev.selectedAnswer === course.questions[prev.currentIndex].answer;
+      const current = questions[prev.currentIndex];
+      if (!current) return prev;
+      const isCorrect = prev.selectedAnswer === current.answer;
       return {
         ...prev,
         isSubmitted: true,
@@ -77,19 +97,19 @@ export function useQuiz(course: CourseData): {
         answers: [
           ...prev.answers,
           {
-            questionId: course.questions[prev.currentIndex].id,
+            questionId: current.id,
             selected: prev.selectedAnswer,
             correct: isCorrect,
           },
         ],
       };
     });
-  }, [course.questions]);
+  }, [questions]);
 
   const nextQuestion = useCallback(() => {
     setQuizState((prev) => {
       const nextIndex = prev.currentIndex + 1;
-      if (nextIndex >= course.questions.length) {
+      if (nextIndex >= questions.length) {
         return { ...prev, isComplete: true, endTime: Date.now() };
       }
       return {
@@ -100,7 +120,7 @@ export function useQuiz(course: CourseData): {
         showExplanation: false,
       };
     });
-  }, [course.questions.length]);
+  }, [questions.length]);
 
   const reset = useCallback(() => {
     setQuizState({
