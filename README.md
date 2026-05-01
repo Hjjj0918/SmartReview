@@ -67,8 +67,13 @@ A modern, responsive single-page app built with **React**, **Tailwind CSS**, and
 
 ### Features
 
-- **Course navigation** — sidebar lists all available courses with question counts.
-- **Focus mode** — hide the sidebar for a distraction-free experience.
+- **Course & chapter management** — create, rename, and delete courses and chapters directly from the sidebar.
+  - Hover over any course or chapter to reveal the ✏️ rename button and ··· context menu.
+  - Double-click a name to inline-edit.
+  - Use the `+ New Course` / `+ New Chapter` buttons to add content.
+  - Delete operations show a confirmation dialog to prevent accidents.
+- **Course navigation** — sidebar accordion lists all courses and their chapters with question counts.
+- **Focus mode** — hide the sidebar for a distraction-free experience. Press `Esc` or click the floating button to exit.
 - **Progress bar** — visual indicator of completion within the current course.
 - **Animated quiz card** — centered question display with smooth transitions between questions.
 - **Interactive options** — hover and selection effects, plus correctness feedback:
