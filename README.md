@@ -105,6 +105,61 @@ npm run dev      # starts dev server at http://localhost:5173
 npm run build    # production build to web/dist/
 ```
 
+### Lecture Upload + MCQ + AI Chat (optional)
+
+The Web UI includes a **Lecture notes** upload button (PDF → text via PyMuPDF) that automatically generates **MCQ questions** and imports them into the sidebar. If the lecture text contains a recognized course code, the questions are merged into that course; otherwise a new course is created.
+
+The AI chat box uses **DeepSeek** by default for text chat (`deepseek-v4-flash`). If you attach images (PPT slides), the backend will use **Gemini** for the multimodal request.
+
+1) Start the Python API server (in the repo root):
+
+```bash
+python -m pip install -r requirements.txt
+python -m uvicorn smartreview_api:app --reload --port 8000
+```
+
+2) Enable DeepSeek (required for MCQ generation & text chat):
+
+- PowerShell (current session):
+
+```powershell
+$env:DEEPSEEK_API_KEY = "YOUR_KEY"
+```
+
+- CMD (current session):
+
+```bat
+set DEEPSEEK_API_KEY=YOUR_KEY
+```
+
+Optional settings:
+
+- `DEEPSEEK_MODEL` (default: `deepseek-v4-flash`)
+- `DEEPSEEK_BASE_URL` (if your endpoint differs; supports OpenAI-compatible `/v1/chat/completions`)
+
+3) (Optional) Enable Gemini for image chat (PPT slides):
+
+- PowerShell (current session):
+
+```powershell
+$env:GEMINI_API_KEY = "YOUR_KEY"
+```
+
+- CMD (current session):
+
+```bat
+set GEMINI_API_KEY=YOUR_KEY
+```
+
+4) Run the web dev server:
+
+```bash
+cd web
+npm run dev
+```
+
+Vite is configured to proxy `/api/*` to `http://127.0.0.1:8000` during development.
+
 ---
 
 ## V1 — CLI
