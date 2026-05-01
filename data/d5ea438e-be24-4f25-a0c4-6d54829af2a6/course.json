@@ -1,0 +1,39 @@
+{
+  "schema_version": 2,
+  "course_id": "d5ea438e-be24-4f25-a0c4-6d54829af2a6",
+  "course_name": "Machine Learning",
+  "chapters": [
+    {
+      "chapter_id": "222fe5f2-dd5a-435a-80bc-f29a0991d4bf",
+      "chapter_title": "General",
+      "questions": [
+        {
+          "id": 1,
+          "type": "MCQ",
+          "question": "Which loss function is commonly used for binary classification?",
+          "options": {
+            "A": "Mean Squared Error",
+            "B": "Cross-Entropy Loss",
+            "C": "Huber Loss",
+            "D": "Hinge Loss only"
+          },
+          "answer": "B",
+          "explanation": "Binary classification models often use cross-entropy because it measures the distance between predicted probabilities and true labels."
+        },
+        {
+          "id": 2,
+          "type": "MCQ",
+          "question": "What is the main purpose of regularization in machine learning?",
+          "options": {
+            "A": "Increase training error",
+            "B": "Reduce overfitting",
+            "C": "Guarantee zero bias",
+            "D": "Remove the need for validation data"
+          },
+          "answer": "B",
+          "explanation": "Regularization discourages overly complex models and helps improve generalization on unseen data."
+        }
+      ]
+    }
+  ]
+}
