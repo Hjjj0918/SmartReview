@@ -63,3 +63,51 @@ export async function renameChapter(params: {
     }
   );
 }
+
+export async function createCourse(params: {
+  course_name: string;
+}): Promise<{ course: CourseSummary; library: LibrarySummary }> {
+  return requestJson<{ course: CourseSummary; library: LibrarySummary }>(
+    '/api/library/courses',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    }
+  );
+}
+
+export async function deleteCourse(
+  courseId: string
+): Promise<{ library: LibrarySummary }> {
+  return requestJson<{ library: LibrarySummary }>(
+    `/api/library/course/${encodeURIComponent(courseId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+export async function createChapter(params: {
+  courseId: string;
+  chapter_title: string;
+}): Promise<{ course: CourseSummary; library: LibrarySummary }> {
+  const { courseId, chapter_title } = params;
+  return requestJson<{ course: CourseSummary; library: LibrarySummary }>(
+    `/api/library/course/${encodeURIComponent(courseId)}/chapters`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chapter_title }),
+    }
+  );
+}
+
+export async function deleteChapter(params: {
+  courseId: string;
+  chapterId: string;
+}): Promise<{ course: CourseSummary; library: LibrarySummary }> {
+  const { courseId, chapterId } = params;
+  return requestJson<{ course: CourseSummary; library: LibrarySummary }>(
+    `/api/library/course/${encodeURIComponent(courseId)}/chapter/${encodeURIComponent(chapterId)}`,
+    { method: 'DELETE' }
+  );
+}

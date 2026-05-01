@@ -5,6 +5,7 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -637,6 +638,111 @@ def rename_chapter(
             raise HTTPException(status_code=409, detail="Another chapter already has this title")
 
     target["chapter_title"] = new_title
+    _atomic_write_json(course_file, course)
+    return {"course": _build_course_summary(course), "library": list_courses()}
+
+
+@app.post("/api/library/courses")
+def create_course(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    _ensure_library_bootstrapped()
+
+    course_name = payload.get("course_name")
+    if not isinstance(course_name, str) or not course_name.strip():
+        raise HTTPException(status_code=400, detail="course_name must be a non-empty string")
+    course_name = course_name.strip()
+
+    new_key = _normalize_key(course_name)
+    for path in _iter_course_files():
+        try:
+            existing = _load_json_file(path)
+        except Exception:
+            continue
+        if not isinstance(existing, dict):
+            continue
+        if _normalize_key(str(existing.get("course_name") or "")) == new_key:
+            raise HTTPException(status_code=409, detail="Another course already has this name")
+
+    course = _new_course(course_name=course_name)
+    _save_course(course)
+    return {"course": _build_course_summary(course), "library": list_courses()}
+
+
+@app.delete("/api/library/course/{course_id}")
+def delete_course(course_id: str) -> dict[str, Any]:
+    _ensure_library_bootstrapped()
+
+    course_file = _course_file_path(course_id)
+    if not course_file.exists():
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    course_dir = _course_dir(course_id)
+    if course_dir.exists():
+        shutil.rmtree(course_dir)
+
+    return {"library": list_courses()}
+
+
+@app.post("/api/library/course/{course_id}/chapters")
+def create_chapter(course_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    _ensure_library_bootstrapped()
+
+    chapter_title = payload.get("chapter_title")
+    if not isinstance(chapter_title, str) or not chapter_title.strip():
+        raise HTTPException(status_code=400, detail="chapter_title must be a non-empty string")
+    chapter_title = chapter_title.strip()
+
+    course_file = _course_file_path(course_id)
+    if not course_file.exists():
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    course = _load_json_file(course_file)
+    if not isinstance(course, dict):
+        raise HTTPException(status_code=500, detail="Invalid course data")
+
+    new_key = _normalize_key(chapter_title)
+    chapters = course.get("chapters") or []
+    if not isinstance(chapters, list):
+        chapters = []
+        course["chapters"] = chapters
+    for ch in chapters:
+        if not isinstance(ch, dict):
+            continue
+        if _normalize_key(str(ch.get("chapter_title") or "")) == new_key:
+            raise HTTPException(status_code=409, detail="Another chapter already has this title")
+
+    chapter = _new_chapter(chapter_title=chapter_title)
+    chapters.append(chapter)
+    _atomic_write_json(course_file, course)
+    return {"course": _build_course_summary(course), "library": list_courses()}
+
+
+@app.delete("/api/library/course/{course_id}/chapter/{chapter_id}")
+def delete_chapter(course_id: str, chapter_id: str) -> dict[str, Any]:
+    _ensure_library_bootstrapped()
+
+    course_file = _course_file_path(course_id)
+    if not course_file.exists():
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    course = _load_json_file(course_file)
+    if not isinstance(course, dict):
+        raise HTTPException(status_code=500, detail="Invalid course data")
+
+    chapters = course.get("chapters") or []
+    if not isinstance(chapters, list):
+        raise HTTPException(status_code=500, detail="Invalid course chapters")
+
+    target_idx: int | None = None
+    for idx, ch in enumerate(chapters):
+        if not isinstance(ch, dict):
+            continue
+        if str(ch.get("chapter_id") or "") == chapter_id:
+            target_idx = idx
+            break
+    if target_idx is None:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    chapters.pop(target_idx)
     _atomic_write_json(course_file, course)
     return {"course": _build_course_summary(course), "library": list_courses()}
 

@@ -13,6 +13,10 @@ import {
   fetchLibrarySummary,
   renameChapter,
   renameCourse,
+  createCourse,
+  deleteCourse,
+  createChapter,
+  deleteChapter,
 } from './api/library';
 
 export default function App() {
@@ -168,6 +172,73 @@ export default function App() {
     [activeCourse?.course_id]
   );
 
+  const handleCreateCourse = useCallback(
+    async (name: string) => {
+      const res = await createCourse({ course_name: name });
+      setCourses(res.library.courses);
+    },
+    []
+  );
+
+  const handleDeleteCourse = useCallback(
+    async (courseId: string) => {
+      const res = await deleteCourse(courseId);
+      setCourses(res.library.courses);
+      if (activeCourseId === courseId) {
+        setActiveCourseId(null);
+        setActiveChapterId(null);
+        setActiveCourse(null);
+        quiz.actions.reset();
+      }
+    },
+    [activeCourseId, quiz.actions]
+  );
+
+  const handleCreateChapter = useCallback(
+    async (courseId: string, title: string) => {
+      const res = await createChapter({ courseId, chapter_title: title });
+      setCourses(res.library.courses);
+      if (activeCourse?.course_id === courseId) {
+        setActiveCourse((prev) => {
+          if (!prev) return prev;
+          const updatedChapter = res.course.chapters.find(
+            (ch) => ch.chapter_title === title
+          );
+          if (!updatedChapter) return prev;
+          return {
+            ...prev,
+            chapters: [...prev.chapters, {
+              chapter_id: updatedChapter.chapter_id,
+              chapter_title: updatedChapter.chapter_title,
+              questions: [],
+            }],
+          };
+        });
+      }
+    },
+    [activeCourse?.course_id]
+  );
+
+  const handleDeleteChapter = useCallback(
+    async (courseId: string, chapterId: string) => {
+      const res = await deleteChapter({ courseId, chapterId });
+      setCourses(res.library.courses);
+      if (activeCourse?.course_id === courseId) {
+        setActiveCourse((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            chapters: prev.chapters.filter((ch) => ch.chapter_id !== chapterId),
+          };
+        });
+        if (activeChapterId === chapterId) {
+          setActiveChapterId(null);
+        }
+      }
+    },
+    [activeChapterId, activeCourse?.course_id]
+  );
+
   const handleToggleFocus = useCallback(() => {
     setIsFocused((prev) => !prev);
   }, []);
@@ -192,6 +263,10 @@ export default function App() {
             onLibraryChanged={refreshLibrary}
             onRenameCourse={handleRenameCourse}
             onRenameChapter={handleRenameChapter}
+            onCreateCourse={handleCreateCourse}
+            onDeleteCourse={handleDeleteCourse}
+            onCreateChapter={handleCreateChapter}
+            onDeleteChapter={handleDeleteChapter}
           />
           <main className="flex-1 flex items-center justify-center p-8">
             <motion.div
@@ -243,6 +318,10 @@ export default function App() {
           onLibraryChanged={refreshLibrary}
           onRenameCourse={handleRenameCourse}
           onRenameChapter={handleRenameChapter}
+          onCreateCourse={handleCreateCourse}
+          onDeleteCourse={handleDeleteCourse}
+          onCreateChapter={handleCreateChapter}
+          onDeleteChapter={handleDeleteChapter}
         />
 
       <main className="flex-1 flex flex-col min-w-0">
