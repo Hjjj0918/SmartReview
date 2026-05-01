@@ -172,9 +172,65 @@ export default function App() {
     setIsFocused((prev) => !prev);
   }, []);
 
+  // Focus toggle rendered via portal to document.body — works on all screens
+  const focusToggle = <FocusToggle isVisible={isFocused} onToggle={handleToggleFocus} />;
+
   // Welcome screen — no course selected
   if (!activeCourseId || !activeCourse) {
     return (
+      <>
+        {focusToggle}
+        <div className="h-screen flex bg-slate-50">
+          <Sidebar
+            courses={courses}
+            activeCourseId={activeCourseId}
+            activeChapterId={activeChapterId}
+            isFocused={isFocused}
+            onSelectCourse={handleSelectCourse}
+            onSelectChapter={handleSelectChapter}
+            onToggleFocus={handleToggleFocus}
+            onLibraryChanged={refreshLibrary}
+            onRenameCourse={handleRenameCourse}
+            onRenameChapter={handleRenameChapter}
+          />
+          <main className="flex-1 flex items-center justify-center p-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="text-center max-w-md"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-indigo-200">
+                <GraduationCap size={32} className="text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">
+                Welcome to SmartReview
+              </h2>
+              <p className="text-slate-500 leading-relaxed">
+                Select a course from the sidebar to start your self-review
+                session. Track your progress, review explanations, and master the
+                material.
+              </p>
+
+              {isLoadingLibrary && (
+                <p className="mt-4 text-xs text-slate-400">Loading library…</p>
+              )}
+              {libraryError && (
+                <p className="mt-4 text-xs text-rose-600 break-words">
+                  {libraryError}
+                </p>
+              )}
+            </motion.div>
+          </main>
+        </div>
+      </>
+    );
+  }
+
+  // Quiz in progress or stats
+  return (
+    <>
+      {focusToggle}
       <div className="h-screen flex bg-slate-50">
         <Sidebar
           courses={courses}
@@ -188,66 +244,12 @@ export default function App() {
           onRenameCourse={handleRenameCourse}
           onRenameChapter={handleRenameChapter}
         />
-        <main className="flex-1 flex items-center justify-center p-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-center max-w-md"
-          >
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-indigo-200">
-              <GraduationCap size={32} className="text-white" />
-            </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">
-              Welcome to SmartReview
-            </h2>
-            <p className="text-slate-500 leading-relaxed">
-              Select a course from the sidebar to start your self-review
-              session. Track your progress, review explanations, and master the
-              material.
-            </p>
-
-            {isLoadingLibrary && (
-              <p className="mt-4 text-xs text-slate-400">Loading library…</p>
-            )}
-            {libraryError && (
-              <p className="mt-4 text-xs text-rose-600 break-words">
-                {libraryError}
-              </p>
-            )}
-          </motion.div>
-        </main>
-      </div>
-    );
-  }
-
-  // Quiz in progress or stats
-  return (
-    <div className="h-screen flex bg-slate-50">
-      <Sidebar
-        courses={courses}
-        activeCourseId={activeCourseId}
-        activeChapterId={activeChapterId}
-        isFocused={isFocused}
-        onSelectCourse={handleSelectCourse}
-        onSelectChapter={handleSelectChapter}
-        onToggleFocus={handleToggleFocus}
-        onLibraryChanged={refreshLibrary}
-        onRenameCourse={handleRenameCourse}
-        onRenameChapter={handleRenameChapter}
-      />
 
       <main className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
         {!quiz.state.isComplete && (
           <header className="h-16 shrink-0 flex items-center px-6 border-b border-slate-200/70 bg-white/80 backdrop-blur-sm">
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              {isFocused && (
-                <FocusToggle
-                  isFocused={isFocused}
-                  onToggle={handleToggleFocus}
-                />
-              )}
               <div className="min-w-0">
                 <h1 className="text-sm font-semibold text-slate-800 truncate">
                   {quizTitle}
@@ -318,6 +320,7 @@ export default function App() {
           </div>
         </div>
       </main>
-    </div>
+      </div>
+    </>
   );
 }
