@@ -7,24 +7,34 @@ SmartReview is a lightweight study tool for course-based multiple-choice self-re
 ```text
 SmartReview/
 ├── smartreview.py              # V1 CLI tool
-├── questions/                   # V1 course data (shared with V2)
+├── smartreview_api.py          # V2 FastAPI backend (library + lecture tools)
+├── questions/                  # V1 course data (used to bootstrap V2 on first run)
 │   ├── COMP3251 - Algorithm Design/
 │   │   └── questions.json
 │   └── Machine Learning/
 │       └── questions.json
+├── data/                       # V2 library storage (generated at runtime; gitignored)
+│   └── <course_id>/course.json
 ├── web/                         # V2 Web UI (React + Vite + Tailwind)
 │   ├── src/
+│   │   ├── api/                 # API client
 │   │   ├── components/          # UI components
 │   │   ├── hooks/               # Quiz state hook
-│   │   ├── data/                # Course loader + copied JSON files
 │   │   └── App.tsx              # Root layout
 │   ├── package.json
 │   ├── tailwind.config.js
 │   └── vite.config.ts
+├── requirements.txt
 └── README.md
 ```
 
 ## Data Format
+
+V1 (CLI) reads `questions/<course>/questions.json`.
+
+V2 (Web UI + API) persists the library to `data/` (one `course.json` per course). This directory is generated at runtime and intentionally not tracked by Git.
+
+On API startup, if `data/` is empty, it will import legacy `questions/*/questions.json` once. Delete `data/` to re-bootstrap.
 
 Use one `questions.json` file per course directory. The file follows this structure:
 
