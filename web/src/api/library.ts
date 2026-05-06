@@ -5,11 +5,13 @@ import type {
   LibrarySummary,
 } from '../types';
 
+import { readApiErrorMessage } from './request';
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(url, init);
   if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(text || `Request failed (${resp.status})`);
+    const message = await readApiErrorMessage(resp);
+    throw new Error(message);
   }
   return (await resp.json()) as T;
 }

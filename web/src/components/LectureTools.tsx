@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { FileUp, MessageSquare, Paperclip, Send } from 'lucide-react';
 import type { ImportTextResult } from '../types';
 import { importLectureText } from '../api/library';
+import { readApiErrorMessage } from '../api/request';
 
 type ChatRole = 'user' | 'assistant';
 
@@ -114,8 +115,8 @@ export default function LectureTools({
         });
 
         if (!resp.ok) {
-          const text = await resp.text();
-          throw new Error(text || `Upload failed (${resp.status})`);
+          const message = await readApiErrorMessage(resp);
+          throw new Error(message);
         }
 
         extracted = (await resp.json()) as LectureExtractResponse;
@@ -183,8 +184,8 @@ export default function LectureTools({
       });
 
       if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || `Chat failed (${resp.status})`);
+        const message = await readApiErrorMessage(resp);
+        throw new Error(message);
       }
 
       const data = (await resp.json()) as { reply: string };
