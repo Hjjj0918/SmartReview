@@ -1,8 +1,15 @@
-import { useCallback, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from 'react';
 import { motion } from 'framer-motion';
 import { FileUp, MessageSquare, Paperclip, Send } from 'lucide-react';
 import type { ImportTextResult } from '../types';
 import { importLectureText } from '../api/library';
+import { readApiErrorMessage } from '../api/request';
 
 type ChatRole = 'user' | 'assistant';
 
@@ -26,9 +33,7 @@ interface LectureToolsProps {
   onLibraryChanged: () => void;
 }
 
-export default function LectureTools({
-  onLibraryChanged,
-}: LectureToolsProps) {
+export default function LectureTools({ onLibraryChanged }: LectureToolsProps) {
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -71,7 +76,9 @@ export default function LectureTools({
 
       const text = (extracted.text || '').trim();
       if (!text) {
-        setGenerateError('No text extracted from PDF. Try a text-based PDF or OCR it first.');
+        setGenerateError(
+          'No text extracted from PDF. Try a text-based PDF or OCR it first.',
+        );
         return;
       }
 
@@ -84,16 +91,17 @@ export default function LectureTools({
 
         onLibraryChanged();
         setImportStatus(
-          `Imported ${result.course_name} / ${result.chapter_title} (+${result.added_question_count} questions)`
+          `Imported ${result.course_name} / ${result.chapter_title} (+${result.added_question_count} questions)`,
         );
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'MCQ generation failed';
+        const message =
+          err instanceof Error ? err.message : 'MCQ generation failed';
         setGenerateError(message);
       } finally {
         setIsGenerating(false);
       }
     },
-    [onLibraryChanged]
+    [onLibraryChanged],
   );
 
   const handlePdfSelected = useCallback(
@@ -114,8 +122,8 @@ export default function LectureTools({
         });
 
         if (!resp.ok) {
-          const text = await resp.text();
-          throw new Error(text || `Upload failed (${resp.status})`);
+          const message = await readApiErrorMessage(resp);
+          throw new Error(message);
         }
 
         extracted = (await resp.json()) as LectureExtractResponse;
@@ -131,7 +139,7 @@ export default function LectureTools({
         await generateAndImportMcq(extracted);
       }
     },
-    [generateAndImportMcq]
+    [generateAndImportMcq],
   );
 
   const handlePdfInputChange = useCallback(
@@ -141,7 +149,7 @@ export default function LectureTools({
       if (!file) return;
       await handlePdfSelected(file);
     },
-    [handlePdfSelected]
+    [handlePdfSelected],
   );
 
   const handleImageInputChange = useCallback(
@@ -151,7 +159,7 @@ export default function LectureTools({
       if (files.length === 0) return;
       setAttachedImages(files);
     },
-    []
+    [],
   );
 
   const sendChat = useCallback(async () => {
@@ -161,7 +169,10 @@ export default function LectureTools({
     setChatError(null);
     setIsSending(true);
 
-    const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: question }];
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      { role: 'user', content: question },
+    ];
     setMessages(nextMessages);
     setDraft('');
 
@@ -183,12 +194,15 @@ export default function LectureTools({
       });
 
       if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || `Chat failed (${resp.status})`);
+        const message = await readApiErrorMessage(resp);
+        throw new Error(message);
       }
 
       const data = (await resp.json()) as { reply: string };
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: data.reply },
+      ]);
       setAttachedImages([]);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Chat failed';
@@ -211,7 +225,7 @@ export default function LectureTools({
       event.preventDefault();
       await sendChat();
     },
-    [sendChat]
+    [sendChat],
   );
 
   return (
@@ -229,7 +243,11 @@ export default function LectureTools({
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <FileUp size={14} />
-            {isUploading ? 'Uploading…' : isGenerating ? 'Generating…' : 'Upload PDF'}
+            {isUploading
+              ? 'Uploading…'
+              : isGenerating
+                ? 'Generating…'
+                : 'Upload PDF'}
           </motion.button>
           <input
             ref={pdfInputRef}
@@ -253,15 +271,21 @@ export default function LectureTools({
         )}
 
         {importStatus && (
-          <p className="mt-1 text-xs text-emerald-700 break-words">{importStatus}</p>
+          <p className="mt-1 text-xs text-emerald-700 break-words">
+            {importStatus}
+          </p>
         )}
 
         {uploadError && (
-          <p className="mt-1 text-xs text-rose-600 break-words">{uploadError}</p>
+          <p className="mt-1 text-xs text-rose-600 break-words">
+            {uploadError}
+          </p>
         )}
 
         {generateError && (
-          <p className="mt-1 text-xs text-rose-600 break-words">{generateError}</p>
+          <p className="mt-1 text-xs text-rose-600 break-words">
+            {generateError}
+          </p>
         )}
       </div>
 
@@ -277,7 +301,9 @@ export default function LectureTools({
           {messages.map((m, idx) => (
             <div
               key={idx}
-              className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}
+              className={
+                m.role === 'user' ? 'flex justify-end' : 'flex justify-start'
+              }
             >
               <div
                 className={`max-w-[85%] text-xs leading-relaxed px-3 py-2 rounded-lg whitespace-pre-wrap break-words ${
@@ -302,7 +328,10 @@ export default function LectureTools({
           <p className="mt-2 text-xs text-rose-600 break-words">{chatError}</p>
         )}
 
-        <form className="mt-2 flex items-center gap-2" onSubmit={handleChatSubmit}>
+        <form
+          className="mt-2 flex items-center gap-2"
+          onSubmit={handleChatSubmit}
+        >
           <motion.button
             type="button"
             whileHover={{ scale: 1.01 }}

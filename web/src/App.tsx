@@ -38,7 +38,8 @@ export default function App() {
       const summary = await fetchLibrarySummary();
       setCourses(summary.courses);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load library';
+      const message =
+        err instanceof Error ? err.message : 'Failed to load library';
       setLibraryError(message);
     } finally {
       setIsLoadingLibrary(false);
@@ -51,7 +52,10 @@ export default function App() {
 
   const selectedChapter = useMemo(() => {
     if (!activeCourse || !activeChapterId) return null;
-    return activeCourse.chapters.find((ch) => ch.chapter_id === activeChapterId) ?? null;
+    return (
+      activeCourse.chapters.find((ch) => ch.chapter_id === activeChapterId) ??
+      null
+    );
   }, [activeChapterId, activeCourse]);
 
   const selectedQuestions = useMemo(() => {
@@ -73,7 +77,7 @@ export default function App() {
 
   const quizSource = useMemo(
     (): QuizSource => ({ title: quizTitle, questions: selectedQuestions }),
-    [quizTitle, selectedQuestions]
+    [quizTitle, selectedQuestions],
   );
 
   const quiz = useQuiz(quizSource);
@@ -94,11 +98,12 @@ export default function App() {
         setActiveCourse(course);
       } catch (err) {
         if (courseLoadSeq.current !== seq) return;
-        const message = err instanceof Error ? err.message : 'Failed to load course';
+        const message =
+          err instanceof Error ? err.message : 'Failed to load course';
         setLibraryError(message);
       }
     },
-    [quiz.actions]
+    [quiz.actions],
   );
 
   const handleSelectChapter = useCallback(
@@ -121,11 +126,12 @@ export default function App() {
         setActiveCourse(course);
       } catch (err) {
         if (courseLoadSeq.current !== seq) return;
-        const message = err instanceof Error ? err.message : 'Failed to load course';
+        const message =
+          err instanceof Error ? err.message : 'Failed to load course';
         setLibraryError(message);
       }
     },
-    [activeCourse?.course_id, quiz.actions]
+    [activeCourse?.course_id, quiz.actions],
   );
 
   const handleChangeCourse = useCallback(() => {
@@ -140,10 +146,12 @@ export default function App() {
       const res = await renameCourse({ courseId, course_name: newName });
       setCourses(res.library.courses);
       if (activeCourse?.course_id === courseId) {
-        setActiveCourse((prev) => (prev ? { ...prev, course_name: newName } : prev));
+        setActiveCourse((prev) =>
+          prev ? { ...prev, course_name: newName } : prev,
+        );
       }
     },
-    [activeCourse?.course_id]
+    [activeCourse?.course_id],
   );
 
   const handleRenameChapter = useCallback(
@@ -163,22 +171,19 @@ export default function App() {
             chapters: prev.chapters.map((ch) =>
               ch.chapter_id === chapterId
                 ? { ...ch, chapter_title: newTitle }
-                : ch
+                : ch,
             ),
           };
         });
       }
     },
-    [activeCourse?.course_id]
+    [activeCourse?.course_id],
   );
 
-  const handleCreateCourse = useCallback(
-    async (name: string) => {
-      const res = await createCourse({ course_name: name });
-      setCourses(res.library.courses);
-    },
-    []
-  );
+  const handleCreateCourse = useCallback(async (name: string) => {
+    const res = await createCourse({ course_name: name });
+    setCourses(res.library.courses);
+  }, []);
 
   const handleDeleteCourse = useCallback(
     async (courseId: string) => {
@@ -191,7 +196,7 @@ export default function App() {
         quiz.actions.reset();
       }
     },
-    [activeCourseId, quiz.actions]
+    [activeCourseId, quiz.actions],
   );
 
   const handleCreateChapter = useCallback(
@@ -202,21 +207,24 @@ export default function App() {
         setActiveCourse((prev) => {
           if (!prev) return prev;
           const updatedChapter = res.course.chapters.find(
-            (ch) => ch.chapter_title === title
+            (ch) => ch.chapter_title === title,
           );
           if (!updatedChapter) return prev;
           return {
             ...prev,
-            chapters: [...prev.chapters, {
-              chapter_id: updatedChapter.chapter_id,
-              chapter_title: updatedChapter.chapter_title,
-              questions: [],
-            }],
+            chapters: [
+              ...prev.chapters,
+              {
+                chapter_id: updatedChapter.chapter_id,
+                chapter_title: updatedChapter.chapter_title,
+                questions: [],
+              },
+            ],
           };
         });
       }
     },
-    [activeCourse?.course_id]
+    [activeCourse?.course_id],
   );
 
   const handleDeleteChapter = useCallback(
@@ -236,7 +244,7 @@ export default function App() {
         }
       }
     },
-    [activeChapterId, activeCourse?.course_id]
+    [activeChapterId, activeCourse?.course_id],
   );
 
   const handleToggleFocus = useCallback(() => {
@@ -244,7 +252,9 @@ export default function App() {
   }, []);
 
   // Focus toggle rendered via portal to document.body — works on all screens
-  const focusToggle = <FocusToggle isVisible={isFocused} onToggle={handleToggleFocus} />;
+  const focusToggle = (
+    <FocusToggle isVisible={isFocused} onToggle={handleToggleFocus} />
+  );
 
   // Welcome screen — no course selected
   if (!activeCourseId || !activeCourse) {
@@ -283,8 +293,8 @@ export default function App() {
               </h2>
               <p className="text-slate-500 leading-relaxed">
                 Select a course from the sidebar to start your self-review
-                session. Track your progress, review explanations, and master the
-                material.
+                session. Track your progress, review explanations, and master
+                the material.
               </p>
 
               {isLoadingLibrary && (
@@ -324,81 +334,80 @@ export default function App() {
           onDeleteChapter={handleDeleteChapter}
         />
 
-      <main className="flex-1 flex flex-col min-w-0">
-        {/* Top bar */}
-        {!quiz.state.isComplete && (
-          <header className="h-16 shrink-0 flex items-center px-6 border-b border-slate-200/70 bg-white/80 backdrop-blur-sm">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="min-w-0">
-                <h1 className="text-sm font-semibold text-slate-800 truncate">
-                  {quizTitle}
-                </h1>
-                <p className="text-xs text-slate-400">Self-review</p>
+        <main className="flex-1 flex flex-col min-w-0">
+          {/* Top bar */}
+          {!quiz.state.isComplete && (
+            <header className="h-16 shrink-0 flex items-center px-6 border-b border-slate-200/70 bg-white/80 backdrop-blur-sm">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="min-w-0">
+                  <h1 className="text-sm font-semibold text-slate-800 truncate">
+                    {quizTitle}
+                  </h1>
+                  <p className="text-xs text-slate-400">Self-review</p>
+                </div>
               </div>
-            </div>
-            <ProgressBar
-              current={quiz.state.currentIndex}
-              total={selectedQuestions.length}
-              progress={quiz.progress}
-            />
-          </header>
-        )}
+              <ProgressBar
+                current={quiz.state.currentIndex}
+                total={selectedQuestions.length}
+                progress={quiz.progress}
+              />
+            </header>
+          )}
 
-        {/* Content area */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="min-h-full flex items-center justify-center p-6 sm:p-8">
-            <AnimatePresence mode="wait">
-              {quiz.state.isComplete && quiz.stats ? (
-                <motion.div
-                  key="stats"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  <StatsPanel
-                    stats={quiz.stats}
-                    courseName={quizTitle}
-                    onRetry={quiz.actions.reset}
-                    onChangeCourse={handleChangeCourse}
-                  />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key={quiz.state.currentIndex}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="w-full"
-                >
-                  {/* Course back button (shown when question area is visible) */}
-                  {isFocused && (
-                    <button
-                      onClick={handleChangeCourse}
-                      className="mb-4 flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      <ArrowLeft size={14} />
-                      All Courses
-                    </button>
-                  )}
-                  <QuizCard
-                    question={quiz.currentQuestion}
-                    selectedAnswer={quiz.state.selectedAnswer}
-                    isSubmitted={quiz.state.isSubmitted}
-                    showExplanation={quiz.state.showExplanation}
-                    isLastQuestion={
-                      quiz.state.currentIndex ===
-                      selectedQuestions.length - 1
-                    }
-                    onSelect={quiz.actions.selectAnswer}
-                    onSubmit={quiz.actions.submitAnswer}
-                    onNext={quiz.actions.nextQuestion}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
+          {/* Content area */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="min-h-full flex items-center justify-center p-6 sm:p-8">
+              <AnimatePresence mode="wait">
+                {quiz.state.isComplete && quiz.stats ? (
+                  <motion.div
+                    key="stats"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    <StatsPanel
+                      stats={quiz.stats}
+                      courseName={quizTitle}
+                      onRetry={quiz.actions.reset}
+                      onChangeCourse={handleChangeCourse}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key={quiz.state.currentIndex}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="w-full"
+                  >
+                    {/* Course back button (shown when question area is visible) */}
+                    {isFocused && (
+                      <button
+                        onClick={handleChangeCourse}
+                        className="mb-4 flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        <ArrowLeft size={14} />
+                        All Courses
+                      </button>
+                    )}
+                    <QuizCard
+                      question={quiz.currentQuestion}
+                      selectedAnswer={quiz.state.selectedAnswer}
+                      isSubmitted={quiz.state.isSubmitted}
+                      showExplanation={quiz.state.showExplanation}
+                      isLastQuestion={
+                        quiz.state.currentIndex === selectedQuestions.length - 1
+                      }
+                      onSelect={quiz.actions.selectAnswer}
+                      onSubmit={quiz.actions.submitAnswer}
+                      onNext={quiz.actions.nextQuestion}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
       </div>
     </>
   );

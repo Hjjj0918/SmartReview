@@ -1,5 +1,11 @@
 import { useState, useCallback, useMemo } from 'react';
-import type { QuizSource, Question, AnswerKey, AnswerRecord, QuizStats } from '../types';
+import type {
+  QuizSource,
+  Question,
+  AnswerKey,
+  AnswerRecord,
+  QuizStats,
+} from '../types';
 
 export interface QuizState {
   currentIndex: number;
@@ -50,20 +56,17 @@ export function useQuiz(source: QuizSource): {
 
   const currentQuestion = useMemo(
     () => questions[quizState.currentIndex] ?? EMPTY_QUESTION,
-    [questions, quizState.currentIndex]
+    [questions, quizState.currentIndex],
   );
 
-  const progress = useMemo(
-    () => {
-      if (questions.length === 0) return 0;
-      return (
-        ((quizState.currentIndex + (quizState.isSubmitted ? 1 : 0)) /
-          questions.length) *
-        100
-      );
-    },
-    [quizState.currentIndex, quizState.isSubmitted, questions.length]
-  );
+  const progress = useMemo(() => {
+    if (questions.length === 0) return 0;
+    return (
+      ((quizState.currentIndex + (quizState.isSubmitted ? 1 : 0)) /
+        questions.length) *
+      100
+    );
+  }, [quizState.currentIndex, quizState.isSubmitted, questions.length]);
 
   const stats = useMemo((): QuizStats | null => {
     if (!quizState.isComplete) return null;
@@ -75,12 +78,20 @@ export function useQuiz(source: QuizSource): {
       accuracy: Math.round((correct / quizState.answers.length) * 100),
       duration: endTime - quizState.startTime,
     };
-  }, [quizState.isComplete, quizState.answers, quizState.startTime, quizState.endTime]);
+  }, [
+    quizState.isComplete,
+    quizState.answers,
+    quizState.startTime,
+    quizState.endTime,
+  ]);
 
   const selectAnswer = useCallback((key: AnswerKey) => {
     setQuizState((prev) => {
       if (prev.isSubmitted) return prev;
-      return { ...prev, selectedAnswer: prev.selectedAnswer === key ? null : key };
+      return {
+        ...prev,
+        selectedAnswer: prev.selectedAnswer === key ? null : key,
+      };
     });
   }, []);
 
@@ -137,7 +148,7 @@ export function useQuiz(source: QuizSource): {
 
   const actions = useMemo(
     () => ({ selectAnswer, submitAnswer, nextQuestion, reset }),
-    [selectAnswer, submitAnswer, nextQuestion, reset]
+    [selectAnswer, submitAnswer, nextQuestion, reset],
   );
 
   return { state: quizState, currentQuestion, progress, stats, actions };

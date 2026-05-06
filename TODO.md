@@ -2,14 +2,14 @@
 
 ### P0 — Reliability & DX (short-term)
 
-- [ ] Add `.env.example` listing required env vars (e.g., `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, size limits).
-- [ ] Add backend unit tests (pytest): course validation, bootstrap import, JSON extraction.
-- [ ] Add frontend linting (ESLint) + formatting (Prettier) and scripts.
-- [ ] Add Python linting (ruff) and scripts.
-- [ ] Add CI (GitHub Actions): Python lint/tests + `npm run build`.
-- [ ] Make `data/` writes concurrency-safe (file lock or transactional storage).
-- [ ] Validate uploads in `/api/lecture/extract` (reject non-PDF) and improve error messages.
-- [ ] Standardize API error payloads and frontend error rendering.
+- [x] Add `.env.example` listing required env vars (e.g., `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, size limits).
+- [x] Add backend unit tests (pytest): course validation, bootstrap import, JSON extraction.
+- [x] Add frontend linting (ESLint) + formatting (Prettier) and scripts.
+- [x] Add Python linting (ruff) and scripts.
+- [x] Add CI (GitHub Actions): Python lint/tests + `npm run build`.
+- [x] Make `data/` writes concurrency-safe (file lock or transactional storage).
+- [x] Validate uploads in `/api/lecture/extract` (reject non-PDF) and improve error messages.
+- [x] Standardize API error payloads and frontend error rendering.
 
 ### P1 — Maintainability (mid-term)
 

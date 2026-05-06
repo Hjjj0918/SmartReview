@@ -35,7 +35,8 @@ export default function ContextMenu({
   useEffect(() => {
     if (open) {
       document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      return () =>
+        document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [open, handleClickOutside]);
 

@@ -6,14 +6,19 @@ import mimetypes
 import os
 import re
 import shutil
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import fitz  # PyMuPDF
 import requests
-from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from filelock import FileLock, Timeout
 
 DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
 DEFAULT_DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
@@ -30,6 +35,53 @@ SCHEMA_VERSION = 2
 COURSE_FILE_NAME = "course.json"
 DEFAULT_CHAPTER_TITLE = os.getenv("SMARTREVIEW_DEFAULT_CHAPTER_TITLE", "General")
 DATA_DIR = Path(__file__).resolve().parent / "data"
+
+_WRITE_LOCK_FILENAME = ".smartreview.lock"
+_WRITE_LOCK_TIMEOUT_SEC = 1.0
+
+
+def _error_payload(
+    message: str,
+    *,
+    status_code: int,
+    details: Any | None = None,
+) -> dict[str, Any]:
+    error: dict[str, Any] = {"message": message, "status_code": status_code}
+    if details is not None:
+        error["details"] = details
+    return {"error": error}
+
+
+def _coerce_error_message(detail: Any) -> str:
+    if isinstance(detail, str) and detail.strip():
+        return detail.strip()
+    if isinstance(detail, dict):
+        message = detail.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+        try:
+            return json.dumps(detail, ensure_ascii=False)
+        except Exception:
+            return str(detail)
+    return str(detail)
+
+
+@contextmanager
+def _data_write_lock(*, timeout_sec: float = _WRITE_LOCK_TIMEOUT_SEC) -> Iterator[None]:
+    """Serialize writes under DATA_DIR to avoid lost updates across requests/workers."""
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    lock_path = DATA_DIR / _WRITE_LOCK_FILENAME
+    lock = FileLock(str(lock_path))
+    try:
+        lock.acquire(timeout=timeout_sec)
+    except Timeout as exc:
+        raise HTTPException(status_code=503, detail="Library is busy, please retry.") from exc
+
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 def _atomic_write_json(path: Path, data: Any) -> None:
@@ -274,10 +326,11 @@ def process_new_file(file_content: str) -> dict[str, str]:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     course_name, chapter_title = _classify_course_and_chapter(file_content=file_content)
 
-    course_path, course, _ = _find_or_create_course(course_name=course_name)
-    chapter, chapter_created = _find_or_create_chapter(course, chapter_title=chapter_title)
-    if chapter_created:
-        _atomic_write_json(course_path, course)
+    with _data_write_lock():
+        course_path, course, _ = _find_or_create_course(course_name=course_name)
+        chapter, chapter_created = _find_or_create_chapter(course, chapter_title=chapter_title)
+        if chapter_created:
+            _atomic_write_json(course_path, course)
 
     return {
         "course_id": str(course.get("course_id")),
@@ -287,7 +340,7 @@ def process_new_file(file_content: str) -> dict[str, str]:
     }
 
 
-def _bootstrap_data_dir_from_v1_questions() -> None:
+def _bootstrap_data_dir_from_v1_questions(*, legacy_root: Path | None = None) -> None:
     """One-time import of legacy questions/<course>/questions.json into data/.
 
     Creates one default chapter per course so V2 can show a tree.
@@ -297,7 +350,8 @@ def _bootstrap_data_dir_from_v1_questions() -> None:
     if _iter_course_files():
         return
 
-    legacy_root = Path(__file__).resolve().parent / "questions"
+    if legacy_root is None:
+        legacy_root = Path(__file__).resolve().parent / "questions"
     if not legacy_root.exists():
         return
 
@@ -396,6 +450,37 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:  # noqa: ARG001
+    message = _coerce_error_message(exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=_error_payload(message, status_code=exc.status_code),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(
+    request: Request, exc: RequestValidationError  # noqa: ARG001
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content=_error_payload(
+            "Invalid request.",
+            status_code=422,
+            details=exc.errors(),
+        ),
+    )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:  # noqa: ARG001
+    return JSONResponse(
+        status_code=500,
+        content=_error_payload("Internal server error.", status_code=500),
+    )
+
+
 @app.get("/api/health")
 def health() -> dict[str, bool]:
     return {"ok": True}
@@ -408,8 +493,11 @@ def _ensure_library_bootstrapped() -> None:
     global _LIBRARY_BOOTSTRAPPED
     if _LIBRARY_BOOTSTRAPPED:
         return
-    _bootstrap_data_dir_from_v1_questions()
-    _LIBRARY_BOOTSTRAPPED = True
+    with _data_write_lock():
+        if _LIBRARY_BOOTSTRAPPED:
+            return
+        _bootstrap_data_dir_from_v1_questions()
+        _LIBRARY_BOOTSTRAPPED = True
 
 
 def _build_course_summary(course: dict[str, Any]) -> dict[str, Any]:
@@ -491,69 +579,92 @@ def import_text(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
             detail=f"questionCount too large (max {MAX_GENERATED_QUESTIONS})",
         )
 
-    routing = process_new_file(file_content)
-    course_id = routing["course_id"]
-    chapter_id = routing["chapter_id"]
+    # LLM calls can be slow; do them outside the write lock.
+    course_name, chapter_title = _classify_course_and_chapter(file_content=file_content)
 
-    course_file = _course_file_path(course_id)
-    try:
-        course = _load_json_file(course_file)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"Failed to load course after routing: {exc}") from exc
-    if not isinstance(course, dict):
-        raise HTTPException(status_code=500, detail="Invalid course data after routing")
+    with _data_write_lock():
+        course_path, course, _ = _find_or_create_course(course_name=course_name)
+        chapter, chapter_created = _find_or_create_chapter(course, chapter_title=chapter_title)
+        if chapter_created:
+            _atomic_write_json(course_path, course)
+
+        course_id = str(course.get("course_id") or "").strip()
+        chapter_id = str(chapter.get("chapter_id") or "").strip()
+        course_name_for_generation = str(course.get("course_name") or course_name or "Imported Lecture")
+
+    if not course_id or not chapter_id:
+        raise HTTPException(status_code=500, detail="Failed to route lecture into a course/chapter")
 
     generated = _generate_mcq_course_from_lecture(
         lecture_text=file_content,
-        course_name=routing.get("course_name") or str(course.get("course_name") or "Imported Lecture"),
+        course_name=course_name_for_generation,
         question_count=question_count_int,
     )
     incoming_questions = generated.get("questions") or []
     if not isinstance(incoming_questions, list) or not incoming_questions:
         raise HTTPException(status_code=502, detail="MCQ generation returned no questions")
 
-    start_id = _max_question_id(course) + 1
     validated = _validate_course_data(
         {
-            "course_name": str(course.get("course_name") or routing.get("course_name") or "Imported Lecture"),
+            "course_name": course_name_for_generation,
             "questions": incoming_questions,
         }
     )
     normalized_questions = validated["questions"]
-    for idx, q in enumerate(normalized_questions, start=0):
-        q["id"] = start_id + idx
 
-    chapters = course.get("chapters") or []
-    if not isinstance(chapters, list):
-        raise HTTPException(status_code=500, detail="Invalid course chapters")
+    with _data_write_lock():
+        course_file = _course_file_path(course_id)
+        if not course_file.exists():
+            raise HTTPException(status_code=404, detail="Course not found")
+        try:
+            course_latest = _load_json_file(course_file)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"Failed to load course after routing: {exc}") from exc
+        if not isinstance(course_latest, dict):
+            raise HTTPException(status_code=500, detail="Invalid course data after routing")
 
-    target_chapter: dict[str, Any] | None = None
-    for ch in chapters:
-        if not isinstance(ch, dict):
-            continue
-        if str(ch.get("chapter_id") or "") == chapter_id:
-            target_chapter = ch
-            break
-    if target_chapter is None:
-        # Should not happen, but recover by creating the chapter again.
-        target_chapter, _ = _find_or_create_chapter(course, chapter_title=routing["chapter_title"])
+        start_id = _max_question_id(course_latest) + 1
+        for idx, q in enumerate(normalized_questions, start=0):
+            q["id"] = start_id + idx
 
-    existing_qs = target_chapter.get("questions")
-    if not isinstance(existing_qs, list):
-        existing_qs = []
-        target_chapter["questions"] = existing_qs
-    existing_qs.extend(normalized_questions)
+        chapters = course_latest.get("chapters") or []
+        if not isinstance(chapters, list):
+            raise HTTPException(status_code=500, detail="Invalid course chapters")
 
-    _atomic_write_json(course_file, course)
+        target_chapter: dict[str, Any] | None = None
+        for ch in chapters:
+            if not isinstance(ch, dict):
+                continue
+            if str(ch.get("chapter_id") or "") == chapter_id:
+                target_chapter = ch
+                break
+
+        if target_chapter is None:
+            # Recover if chapter was deleted/renamed between steps.
+            target_chapter, _ = _find_or_create_chapter(course_latest, chapter_title=chapter_title)
+            chapter_id = str(target_chapter.get("chapter_id") or chapter_id)
+
+        existing_qs = target_chapter.get("questions")
+        if not isinstance(existing_qs, list):
+            existing_qs = []
+            target_chapter["questions"] = existing_qs
+        existing_qs.extend(normalized_questions)
+
+        _atomic_write_json(course_file, course_latest)
+
+        course_name_response = str(course_latest.get("course_name") or course_name_for_generation)
+        chapter_title_response = str(target_chapter.get("chapter_title") or chapter_title)
+        course_question_count = _course_question_count(course_latest)
+        chapter_question_count = len(existing_qs)
 
     return {
         "course_id": course_id,
-        "course_name": str(course.get("course_name") or routing.get("course_name")),
+        "course_name": course_name_response,
         "chapter_id": chapter_id,
-        "chapter_title": routing["chapter_title"],
+        "chapter_title": chapter_title_response,
         "added_question_count": len(normalized_questions),
-        "course_question_count": _course_question_count(course),
-        "chapter_question_count": len(existing_qs),
+        "course_question_count": course_question_count,
+        "chapter_question_count": chapter_question_count,
         "library": list_courses(),
     }
 
@@ -567,30 +678,31 @@ def rename_course(course_id: str, payload: dict[str, Any] = Body(...)) -> dict[s
         raise HTTPException(status_code=400, detail="course_name must be a non-empty string")
     new_name = new_name.strip()
 
-    course_file = _course_file_path(course_id)
-    if not course_file.exists():
-        raise HTTPException(status_code=404, detail="Course not found")
+    with _data_write_lock():
+        course_file = _course_file_path(course_id)
+        if not course_file.exists():
+            raise HTTPException(status_code=404, detail="Course not found")
 
-    course = _load_json_file(course_file)
-    if not isinstance(course, dict):
-        raise HTTPException(status_code=500, detail="Invalid course data")
+        course = _load_json_file(course_file)
+        if not isinstance(course, dict):
+            raise HTTPException(status_code=500, detail="Invalid course data")
 
-    new_key = _normalize_key(new_name)
-    for path in _iter_course_files():
-        if path == course_file:
-            continue
-        try:
-            other = _load_json_file(path)
-        except Exception:
-            continue
-        if not isinstance(other, dict):
-            continue
-        if _normalize_key(str(other.get("course_name") or "")) == new_key:
-            raise HTTPException(status_code=409, detail="Another course already has this name")
+        new_key = _normalize_key(new_name)
+        for path in _iter_course_files():
+            if path == course_file:
+                continue
+            try:
+                other = _load_json_file(path)
+            except Exception:
+                continue
+            if not isinstance(other, dict):
+                continue
+            if _normalize_key(str(other.get("course_name") or "")) == new_key:
+                raise HTTPException(status_code=409, detail="Another course already has this name")
 
-    course["course_name"] = new_name
-    _atomic_write_json(course_file, course)
-    return {"course": _build_course_summary(course), "library": list_courses()}
+        course["course_name"] = new_name
+        _atomic_write_json(course_file, course)
+        return {"course": _build_course_summary(course), "library": list_courses()}
 
 
 @app.patch("/api/library/course/{course_id}/chapter/{chapter_id}")
@@ -606,40 +718,41 @@ def rename_chapter(
         raise HTTPException(status_code=400, detail="chapter_title must be a non-empty string")
     new_title = new_title.strip()
 
-    course_file = _course_file_path(course_id)
-    if not course_file.exists():
-        raise HTTPException(status_code=404, detail="Course not found")
+    with _data_write_lock():
+        course_file = _course_file_path(course_id)
+        if not course_file.exists():
+            raise HTTPException(status_code=404, detail="Course not found")
 
-    course = _load_json_file(course_file)
-    if not isinstance(course, dict):
-        raise HTTPException(status_code=500, detail="Invalid course data")
+        course = _load_json_file(course_file)
+        if not isinstance(course, dict):
+            raise HTTPException(status_code=500, detail="Invalid course data")
 
-    chapters = course.get("chapters") or []
-    if not isinstance(chapters, list):
-        raise HTTPException(status_code=500, detail="Invalid course chapters")
+        chapters = course.get("chapters") or []
+        if not isinstance(chapters, list):
+            raise HTTPException(status_code=500, detail="Invalid course chapters")
 
-    target: dict[str, Any] | None = None
-    for ch in chapters:
-        if not isinstance(ch, dict):
-            continue
-        if str(ch.get("chapter_id") or "") == chapter_id:
-            target = ch
-            break
-    if target is None:
-        raise HTTPException(status_code=404, detail="Chapter not found")
+        target: dict[str, Any] | None = None
+        for ch in chapters:
+            if not isinstance(ch, dict):
+                continue
+            if str(ch.get("chapter_id") or "") == chapter_id:
+                target = ch
+                break
+        if target is None:
+            raise HTTPException(status_code=404, detail="Chapter not found")
 
-    new_key = _normalize_key(new_title)
-    for ch in chapters:
-        if not isinstance(ch, dict):
-            continue
-        if str(ch.get("chapter_id") or "") == chapter_id:
-            continue
-        if _normalize_key(str(ch.get("chapter_title") or "")) == new_key:
-            raise HTTPException(status_code=409, detail="Another chapter already has this title")
+        new_key = _normalize_key(new_title)
+        for ch in chapters:
+            if not isinstance(ch, dict):
+                continue
+            if str(ch.get("chapter_id") or "") == chapter_id:
+                continue
+            if _normalize_key(str(ch.get("chapter_title") or "")) == new_key:
+                raise HTTPException(status_code=409, detail="Another chapter already has this title")
 
-    target["chapter_title"] = new_title
-    _atomic_write_json(course_file, course)
-    return {"course": _build_course_summary(course), "library": list_courses()}
+        target["chapter_title"] = new_title
+        _atomic_write_json(course_file, course)
+        return {"course": _build_course_summary(course), "library": list_courses()}
 
 
 @app.post("/api/library/courses")
@@ -651,35 +764,37 @@ def create_course(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="course_name must be a non-empty string")
     course_name = course_name.strip()
 
-    new_key = _normalize_key(course_name)
-    for path in _iter_course_files():
-        try:
-            existing = _load_json_file(path)
-        except Exception:
-            continue
-        if not isinstance(existing, dict):
-            continue
-        if _normalize_key(str(existing.get("course_name") or "")) == new_key:
-            raise HTTPException(status_code=409, detail="Another course already has this name")
+    with _data_write_lock():
+        new_key = _normalize_key(course_name)
+        for path in _iter_course_files():
+            try:
+                existing = _load_json_file(path)
+            except Exception:
+                continue
+            if not isinstance(existing, dict):
+                continue
+            if _normalize_key(str(existing.get("course_name") or "")) == new_key:
+                raise HTTPException(status_code=409, detail="Another course already has this name")
 
-    course = _new_course(course_name=course_name)
-    _save_course(course)
-    return {"course": _build_course_summary(course), "library": list_courses()}
+        course = _new_course(course_name=course_name)
+        _save_course(course)
+        return {"course": _build_course_summary(course), "library": list_courses()}
 
 
 @app.delete("/api/library/course/{course_id}")
 def delete_course(course_id: str) -> dict[str, Any]:
     _ensure_library_bootstrapped()
 
-    course_file = _course_file_path(course_id)
-    if not course_file.exists():
-        raise HTTPException(status_code=404, detail="Course not found")
+    with _data_write_lock():
+        course_file = _course_file_path(course_id)
+        if not course_file.exists():
+            raise HTTPException(status_code=404, detail="Course not found")
 
-    course_dir = _course_dir(course_id)
-    if course_dir.exists():
-        shutil.rmtree(course_dir)
+        course_dir = _course_dir(course_id)
+        if course_dir.exists():
+            shutil.rmtree(course_dir)
 
-    return {"library": list_courses()}
+        return {"library": list_courses()}
 
 
 @app.post("/api/library/course/{course_id}/chapters")
@@ -691,60 +806,62 @@ def create_chapter(course_id: str, payload: dict[str, Any] = Body(...)) -> dict[
         raise HTTPException(status_code=400, detail="chapter_title must be a non-empty string")
     chapter_title = chapter_title.strip()
 
-    course_file = _course_file_path(course_id)
-    if not course_file.exists():
-        raise HTTPException(status_code=404, detail="Course not found")
+    with _data_write_lock():
+        course_file = _course_file_path(course_id)
+        if not course_file.exists():
+            raise HTTPException(status_code=404, detail="Course not found")
 
-    course = _load_json_file(course_file)
-    if not isinstance(course, dict):
-        raise HTTPException(status_code=500, detail="Invalid course data")
+        course = _load_json_file(course_file)
+        if not isinstance(course, dict):
+            raise HTTPException(status_code=500, detail="Invalid course data")
 
-    new_key = _normalize_key(chapter_title)
-    chapters = course.get("chapters") or []
-    if not isinstance(chapters, list):
-        chapters = []
-        course["chapters"] = chapters
-    for ch in chapters:
-        if not isinstance(ch, dict):
-            continue
-        if _normalize_key(str(ch.get("chapter_title") or "")) == new_key:
-            raise HTTPException(status_code=409, detail="Another chapter already has this title")
+        new_key = _normalize_key(chapter_title)
+        chapters = course.get("chapters") or []
+        if not isinstance(chapters, list):
+            chapters = []
+            course["chapters"] = chapters
+        for ch in chapters:
+            if not isinstance(ch, dict):
+                continue
+            if _normalize_key(str(ch.get("chapter_title") or "")) == new_key:
+                raise HTTPException(status_code=409, detail="Another chapter already has this title")
 
-    chapter = _new_chapter(chapter_title=chapter_title)
-    chapters.append(chapter)
-    _atomic_write_json(course_file, course)
-    return {"course": _build_course_summary(course), "library": list_courses()}
+        chapter = _new_chapter(chapter_title=chapter_title)
+        chapters.append(chapter)
+        _atomic_write_json(course_file, course)
+        return {"course": _build_course_summary(course), "library": list_courses()}
 
 
 @app.delete("/api/library/course/{course_id}/chapter/{chapter_id}")
 def delete_chapter(course_id: str, chapter_id: str) -> dict[str, Any]:
     _ensure_library_bootstrapped()
 
-    course_file = _course_file_path(course_id)
-    if not course_file.exists():
-        raise HTTPException(status_code=404, detail="Course not found")
+    with _data_write_lock():
+        course_file = _course_file_path(course_id)
+        if not course_file.exists():
+            raise HTTPException(status_code=404, detail="Course not found")
 
-    course = _load_json_file(course_file)
-    if not isinstance(course, dict):
-        raise HTTPException(status_code=500, detail="Invalid course data")
+        course = _load_json_file(course_file)
+        if not isinstance(course, dict):
+            raise HTTPException(status_code=500, detail="Invalid course data")
 
-    chapters = course.get("chapters") or []
-    if not isinstance(chapters, list):
-        raise HTTPException(status_code=500, detail="Invalid course chapters")
+        chapters = course.get("chapters") or []
+        if not isinstance(chapters, list):
+            raise HTTPException(status_code=500, detail="Invalid course chapters")
 
-    target_idx: int | None = None
-    for idx, ch in enumerate(chapters):
-        if not isinstance(ch, dict):
-            continue
-        if str(ch.get("chapter_id") or "") == chapter_id:
-            target_idx = idx
-            break
-    if target_idx is None:
-        raise HTTPException(status_code=404, detail="Chapter not found")
+        target_idx: int | None = None
+        for idx, ch in enumerate(chapters):
+            if not isinstance(ch, dict):
+                continue
+            if str(ch.get("chapter_id") or "") == chapter_id:
+                target_idx = idx
+                break
+        if target_idx is None:
+            raise HTTPException(status_code=404, detail="Chapter not found")
 
-    chapters.pop(target_idx)
-    _atomic_write_json(course_file, course)
-    return {"course": _build_course_summary(course), "library": list_courses()}
+        chapters.pop(target_idx)
+        _atomic_write_json(course_file, course)
+        return {"course": _build_course_summary(course), "library": list_courses()}
 
 
 def _extract_pdf_text(pdf_bytes: bytes) -> tuple[str, int]:
@@ -766,9 +883,18 @@ def _extract_pdf_text(pdf_bytes: bytes) -> tuple[str, int]:
 async def extract_lecture_pdf(file: UploadFile = File(...)) -> dict[str, Any]:
     filename = file.filename or "lecture.pdf"
 
+    declared_type = (file.content_type or "").strip().casefold()
+    if declared_type and declared_type not in {"application/pdf", "application/octet-stream"}:
+        raise HTTPException(status_code=400, detail="Only PDF files are supported. Please upload a .pdf file.")
+
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
+
+    # Validate by signature to reject non-PDFs even if the client lies.
+    sniff = raw[:1024].lstrip()
+    if not sniff.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported. Please upload a valid PDF.")
 
     if len(raw) > MAX_PDF_MB * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"PDF too large (max {MAX_PDF_MB}MB)")
@@ -776,7 +902,13 @@ async def extract_lecture_pdf(file: UploadFile = File(...)) -> dict[str, Any]:
     try:
         text, page_count = _extract_pdf_text(raw)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {exc}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Failed to parse PDF. "
+                "Make sure the file is a valid (non-encrypted) PDF and try again."
+            ),
+        ) from exc
 
     detected_course = _detect_course_code_from_text(text)
 

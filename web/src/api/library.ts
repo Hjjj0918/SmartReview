@@ -5,11 +5,13 @@ import type {
   LibrarySummary,
 } from '../types';
 
+import { readApiErrorMessage } from './request';
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(url, init);
   if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(text || `Request failed (${resp.status})`);
+    const message = await readApiErrorMessage(resp);
+    throw new Error(message);
   }
   return (await resp.json()) as T;
 }
@@ -19,7 +21,9 @@ export async function fetchLibrarySummary(): Promise<LibrarySummary> {
 }
 
 export async function fetchCourse(courseId: string): Promise<CourseData> {
-  return requestJson<CourseData>(`/api/library/course/${encodeURIComponent(courseId)}`);
+  return requestJson<CourseData>(
+    `/api/library/course/${encodeURIComponent(courseId)}`,
+  );
 }
 
 export async function importLectureText(params: {
@@ -44,7 +48,7 @@ export async function renameCourse(params: {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ course_name }),
-    }
+    },
   );
 }
 
@@ -60,7 +64,7 @@ export async function renameChapter(params: {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chapter_title }),
-    }
+    },
   );
 }
 
@@ -73,16 +77,16 @@ export async function createCourse(params: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
-    }
+    },
   );
 }
 
 export async function deleteCourse(
-  courseId: string
+  courseId: string,
 ): Promise<{ library: LibrarySummary }> {
   return requestJson<{ library: LibrarySummary }>(
     `/api/library/course/${encodeURIComponent(courseId)}`,
-    { method: 'DELETE' }
+    { method: 'DELETE' },
   );
 }
 
@@ -97,7 +101,7 @@ export async function createChapter(params: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chapter_title }),
-    }
+    },
   );
 }
 
@@ -108,6 +112,6 @@ export async function deleteChapter(params: {
   const { courseId, chapterId } = params;
   return requestJson<{ course: CourseSummary; library: LibrarySummary }>(
     `/api/library/course/${encodeURIComponent(courseId)}/chapter/${encodeURIComponent(chapterId)}`,
-    { method: 'DELETE' }
+    { method: 'DELETE' },
   );
 }

@@ -26,7 +26,14 @@ export default function StatsPanel({
   onChangeCourse,
 }: StatsPanelProps) {
   const accuracy = stats.accuracy;
-  const emoji = accuracy >= 90 ? '🏆' : accuracy >= 70 ? '👏' : accuracy >= 50 ? '📚' : '💪';
+  const emoji =
+    accuracy >= 90
+      ? '🏆'
+      : accuracy >= 70
+        ? '👏'
+        : accuracy >= 50
+          ? '📚'
+          : '💪';
 
   return (
     <motion.div
@@ -52,7 +59,13 @@ export default function StatsPanel({
               cy="64"
               r="56"
               fill="none"
-              stroke={accuracy >= 70 ? '#10b981' : accuracy >= 50 ? '#f59e0b' : '#f43f5e'}
+              stroke={
+                accuracy >= 70
+                  ? '#10b981'
+                  : accuracy >= 50
+                    ? '#f59e0b'
+                    : '#f43f5e'
+              }
               strokeWidth="8"
               strokeLinecap="round"
               strokeDasharray={`${(accuracy / 100) * 352} 352`}
