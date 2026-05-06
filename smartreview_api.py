@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 import base64
 import json
 import mimetypes
@@ -12,8 +14,11 @@ from uuid import uuid4
 
 import fitz  # PyMuPDF
 import requests
-from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from filelock import FileLock, Timeout
 
 DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
 DEFAULT_DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
@@ -30,6 +35,53 @@ SCHEMA_VERSION = 2
 COURSE_FILE_NAME = "course.json"
 DEFAULT_CHAPTER_TITLE = os.getenv("SMARTREVIEW_DEFAULT_CHAPTER_TITLE", "General")
 DATA_DIR = Path(__file__).resolve().parent / "data"
+
+_WRITE_LOCK_FILENAME = ".smartreview.lock"
+_WRITE_LOCK_TIMEOUT_SEC = 1.0
+
+
+def _error_payload(
+    message: str,
+    *,
+    status_code: int,
+    details: Any | None = None,
+) -> dict[str, Any]:
+    error: dict[str, Any] = {"message": message, "status_code": status_code}
+    if details is not None:
+        error["details"] = details
+    return {"error": error}
+
+
+def _coerce_error_message(detail: Any) -> str:
+    if isinstance(detail, str) and detail.strip():
+        return detail.strip()
+    if isinstance(detail, dict):
+        message = detail.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+        try:
+            return json.dumps(detail, ensure_ascii=False)
+        except Exception:
+            return str(detail)
+    return str(detail)
+
+
+@contextmanager
+def _data_write_lock(*, timeout_sec: float = _WRITE_LOCK_TIMEOUT_SEC) -> Iterator[None]:
+    """Serialize writes under DATA_DIR to avoid lost updates across requests/workers."""
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    lock_path = DATA_DIR / _WRITE_LOCK_FILENAME
+    lock = FileLock(str(lock_path))
+    try:
+        lock.acquire(timeout=timeout_sec)
+    except Timeout as exc:
+        raise HTTPException(status_code=503, detail="Library is busy, please retry.") from exc
+
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 def _atomic_write_json(path: Path, data: Any) -> None:
@@ -287,7 +339,7 @@ def process_new_file(file_content: str) -> dict[str, str]:
     }
 
 
-def _bootstrap_data_dir_from_v1_questions() -> None:
+def _bootstrap_data_dir_from_v1_questions(*, legacy_root: Path | None = None) -> None:
     """One-time import of legacy questions/<course>/questions.json into data/.
 
     Creates one default chapter per course so V2 can show a tree.
@@ -297,7 +349,8 @@ def _bootstrap_data_dir_from_v1_questions() -> None:
     if _iter_course_files():
         return
 
-    legacy_root = Path(__file__).resolve().parent / "questions"
+    if legacy_root is None:
+        legacy_root = Path(__file__).resolve().parent / "questions"
     if not legacy_root.exists():
         return
 
@@ -396,6 +449,37 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:  # noqa: ARG001
+    message = _coerce_error_message(exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=_error_payload(message, status_code=exc.status_code),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(
+    request: Request, exc: RequestValidationError  # noqa: ARG001
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content=_error_payload(
+            "Invalid request.",
+            status_code=422,
+            details=exc.errors(),
+        ),
+    )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:  # noqa: ARG001
+    return JSONResponse(
+        status_code=500,
+        content=_error_payload("Internal server error.", status_code=500),
+    )
+
+
 @app.get("/api/health")
 def health() -> dict[str, bool]:
     return {"ok": True}
@@ -408,8 +492,11 @@ def _ensure_library_bootstrapped() -> None:
     global _LIBRARY_BOOTSTRAPPED
     if _LIBRARY_BOOTSTRAPPED:
         return
-    _bootstrap_data_dir_from_v1_questions()
-    _LIBRARY_BOOTSTRAPPED = True
+    with _data_write_lock():
+        if _LIBRARY_BOOTSTRAPPED:
+            return
+        _bootstrap_data_dir_from_v1_questions()
+        _LIBRARY_BOOTSTRAPPED = True
 
 
 def _build_course_summary(course: dict[str, Any]) -> dict[str, Any]:
@@ -651,20 +738,21 @@ def create_course(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="course_name must be a non-empty string")
     course_name = course_name.strip()
 
-    new_key = _normalize_key(course_name)
-    for path in _iter_course_files():
-        try:
-            existing = _load_json_file(path)
-        except Exception:
-            continue
-        if not isinstance(existing, dict):
-            continue
-        if _normalize_key(str(existing.get("course_name") or "")) == new_key:
-            raise HTTPException(status_code=409, detail="Another course already has this name")
+    with _data_write_lock():
+        new_key = _normalize_key(course_name)
+        for path in _iter_course_files():
+            try:
+                existing = _load_json_file(path)
+            except Exception:
+                continue
+            if not isinstance(existing, dict):
+                continue
+            if _normalize_key(str(existing.get("course_name") or "")) == new_key:
+                raise HTTPException(status_code=409, detail="Another course already has this name")
 
-    course = _new_course(course_name=course_name)
-    _save_course(course)
-    return {"course": _build_course_summary(course), "library": list_courses()}
+        course = _new_course(course_name=course_name)
+        _save_course(course)
+        return {"course": _build_course_summary(course), "library": list_courses()}
 
 
 @app.delete("/api/library/course/{course_id}")
@@ -766,9 +854,18 @@ def _extract_pdf_text(pdf_bytes: bytes) -> tuple[str, int]:
 async def extract_lecture_pdf(file: UploadFile = File(...)) -> dict[str, Any]:
     filename = file.filename or "lecture.pdf"
 
+    declared_type = (file.content_type or "").strip().casefold()
+    if declared_type and declared_type not in {"application/pdf", "application/octet-stream"}:
+        raise HTTPException(status_code=400, detail="Only PDF files are supported. Please upload a .pdf file.")
+
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
+
+    # Validate by signature to reject non-PDFs even if the client lies.
+    sniff = raw[:1024].lstrip()
+    if not sniff.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported. Please upload a valid PDF.")
 
     if len(raw) > MAX_PDF_MB * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"PDF too large (max {MAX_PDF_MB}MB)")
@@ -776,7 +873,13 @@ async def extract_lecture_pdf(file: UploadFile = File(...)) -> dict[str, Any]:
     try:
         text, page_count = _extract_pdf_text(raw)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {exc}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Failed to parse PDF. "
+                "Make sure the file is a valid (non-encrypted) PDF and try again."
+            ),
+        ) from exc
 
     detected_course = _detect_course_code_from_text(text)
 
