@@ -100,7 +100,11 @@ export default function OptionButton({
           {text}
         </span>
         {isRevealed && isCorrectAnswer && (
-          <Check size={18} className="text-emerald-500 shrink-0 mt-0.5" strokeWidth={2.5} />
+          <Check
+            size={18}
+            className="text-emerald-500 shrink-0 mt-0.5"
+            strokeWidth={2.5}
+          />
         )}
       </div>
     </motion.button>

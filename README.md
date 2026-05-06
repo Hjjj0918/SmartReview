@@ -118,6 +118,11 @@ cd web
 npm install
 npm run dev      # starts dev server at http://localhost:5173
 npm run build    # production build to web/dist/
+
+# Quality checks
+npm run lint
+npm run format:check
+npm run format
 ```
 
 ### Lecture Upload + MCQ + AI Chat (optional)
@@ -131,6 +136,10 @@ The AI chat box uses **DeepSeek** by default for text chat (`deepseek-v4-flash`)
 ```bash
 python -m pip install -r requirements.txt
 python -m uvicorn smartreview_api:app --reload --port 8000
+
+# Quality checks
+python -m ruff check .
+python -m pytest -q
 ```
 
 2) Enable DeepSeek (required for MCQ generation & text chat):

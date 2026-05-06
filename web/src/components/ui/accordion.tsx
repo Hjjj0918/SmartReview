@@ -26,7 +26,7 @@ export const AccordionTrigger = React.forwardRef<
       ref={ref}
       className={cn(
         'group flex flex-1 items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors',
-        className
+        className,
       )}
       {...props}
     >

@@ -62,7 +62,9 @@ export default function QuizCard({
               text={question.options[key]}
               isSelected={selectedAnswer === key}
               isRevealed={isSubmitted}
-              isCorrect={selectedAnswer === key && selectedAnswer === question.answer}
+              isCorrect={
+                selectedAnswer === key && selectedAnswer === question.answer
+              }
               isCorrectAnswer={key === question.answer}
               onClick={() => onSelect(key)}
               disabled={isSubmitted}

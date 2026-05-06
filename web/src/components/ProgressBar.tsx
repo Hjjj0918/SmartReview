@@ -6,7 +6,11 @@ interface ProgressBarProps {
   progress: number;
 }
 
-export default function ProgressBar({ current, total, progress }: ProgressBarProps) {
+export default function ProgressBar({
+  current,
+  total,
+  progress,
+}: ProgressBarProps) {
   return (
     <div className="w-full max-w-2xl mx-auto px-1">
       <div className="flex items-center justify-between mb-2 text-xs text-slate-500">
