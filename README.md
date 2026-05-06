@@ -199,3 +199,5 @@ Useful options:
 - Add fill-in-the-blank question types with normalized answer checking.
 - Render Markdown in questions and explanations for formulas, code blocks, and links.
 - Import / export question sets via the Web UI.
+
+Planned improvements: see [TODO.md](TODO.md).
