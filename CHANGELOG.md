@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.2.0] — 2026-05-09
+
+### Added — Question Types + Quiz Session
+
+- **Multi-type question support**: MCQ, FILL (fill-in-the-blank), ESSAY, PROOF.
+  - FILL: text + numeric tolerance matching, multi-answer support.
+  - ESSAY / PROOF: reference answer only, no auto-grading.
+- **Quiz Setup card** (`QuizSetupCard`): before starting a quiz, users choose course track (Auto/Humanities/STEM) and question counts per type.
+- **`POST /api/quiz/session`** endpoint: auto-determines course track, fills missing questions from uploaded materials via DeepSeek, returns daily-deterministic shuffled question set.
+- **Schema v3**: `course.json` now includes `course_track`, `course_track_source`, and `materials[]` per chapter.
+- **Material recording**: PDF imports now store clipped text as chapter materials for later gap-filling generation.
+- **`_classify_course_track`**: LLM-based course classification (humanities vs stem).
+- **`_generate_questions_from_material`**: LLM-based mixed-type question generation.
+- **Union question validation** (`_validate_questions_v3`): validates all 4 question types.
+
+### Changed
+
+- `Question` type is now a discriminated union (MCQQuestion | FillQuestion | EssayQuestion | ProofQuestion).
+- `useQuiz` hook supports FILL input, ESSAY/PROOF reveal-only flow, and per-type scoring.
+- `QuizCard` / `ExplanationCard` render by question type.
+- `StatsPanel` shows `correct/scoredTotal` with "(MCQ+FILL)" label.
+- `SCHEMA_VERSION` bumped from 2 to 3.
+
+### Fixed
+
+- Focus mode now supports `Esc` key exit and uses React Portal for bulletproof rendering.
+
 ## [2.1.1] — 2026-05-02
 
 ### Fixed

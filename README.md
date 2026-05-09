@@ -1,30 +1,32 @@
 # SmartReview
 
-SmartReview is a lightweight study tool for course-based multiple-choice self-review. It supports both a **CLI mode** (V1) and a **Web UI** (V2).
+SmartReview is a lightweight study tool for course-based self-review with AI-generated questions. Supports **MCQ**, **fill-in-the-blank**, **essay**, and **proof** question types. Runs in both **CLI mode** (V1) and **Web UI** (V2).
 
 ## Project Structure
 
 ```text
 SmartReview/
 ├── smartreview.py              # V1 CLI tool
-├── smartreview_api.py          # V2 FastAPI backend (library + lecture tools)
+├── smartreview_api.py          # V2 FastAPI backend (library, quiz, lecture tools, AI)
 ├── questions/                  # V1 course data (used to bootstrap V2 on first run)
-│   ├── COMP3251 - Algorithm Design/
-│   │   └── questions.json
-│   └── Machine Learning/
-│       └── questions.json
 ├── data/                       # V2 library storage (generated at runtime; gitignored)
-│   └── <course_id>/course.json
-├── web/                         # V2 Web UI (React + Vite + Tailwind)
+├── tests/
+│   └── test_p0_backend.py      # Backend tests (pytest, 12 tests)
+├── web/                        # V2 Web UI (React + Vite + Tailwind)
 │   ├── src/
-│   │   ├── api/                 # API client
-│   │   ├── components/          # UI components
-│   │   ├── hooks/               # Quiz state hook
-│   │   └── App.tsx              # Root layout
+│   │   ├── api/                # API client (library, quiz)
+│   │   ├── components/         # UI components
+│   │   │   └── ui/             # Radix primitives
+│   │   ├── hooks/              # Quiz state hook (useQuiz)
+│   │   ├── lib/                # Utilities (cn)
+│   │   └── App.tsx             # Root layout + routing
 │   ├── package.json
 │   ├── tailwind.config.js
 │   └── vite.config.ts
+├── .env.example                # API key template → copy to .env
 ├── requirements.txt
+├── TODO.md
+├── CHANGELOG.md
 └── README.md
 ```
 
@@ -90,7 +92,14 @@ A modern, responsive single-page app built with **React**, **Tailwind CSS**, and
   - Correct → green background + subtle bounce
   - Incorrect → red background + horizontal shake
 - **Explanation panel** — slides in after submission, showing the correct answer and explanation.
-- **Stats summary** — animated score ring, accuracy, duration, and correct count after completing a course.
+- **Multi-type questions** — supports MCQ, Fill-in-the-blank (FILL), Essay (ESSAY), and Proof (PROOF).
+  - FILL: numeric tolerance matching + text normalization.
+  - ESSAY/PROOF: reference answer reveal only (no auto-grading).
+- **Quiz setup** — before starting, choose course track (Auto / Humanities / STEM) and question counts per type.
+  - Auto-detection of course track via LLM based on uploaded materials.
+  - Daily-deterministic question sampling (same config → same questions on the same day).
+  - Auto gap-filling: if the question bank runs short, DeepSeek generates new questions from materials.
+- **Stats summary** — animated score ring, accuracy (MCQ+FILL only), duration, and correct count after completing a course.
 
 ### Tech Stack
 
@@ -142,40 +151,18 @@ python -m ruff check .
 python -m pytest -q
 ```
 
-2) Enable DeepSeek (required for MCQ generation & text chat):
+2) Set your API keys (one-time setup):
 
-- PowerShell (current session):
-
-```powershell
-$env:DEEPSEEK_API_KEY = "YOUR_KEY"
+```bash
+cp .env.example .env
+# Edit .env and fill in your keys:
+#   DEEPSEEK_API_KEY=sk-xxxxxxxx
+#   (optional) GEMINI_API_KEY=...
 ```
 
-- CMD (current session):
+The backend auto-loads `.env` via `python-dotenv` — no need to set env vars manually every session. `.env` is in `.gitignore`.
 
-```bat
-set DEEPSEEK_API_KEY=YOUR_KEY
-```
-
-Optional settings:
-
-- `DEEPSEEK_MODEL` (default: `deepseek-v4-flash`)
-- `DEEPSEEK_BASE_URL` (if your endpoint differs; supports OpenAI-compatible `/v1/chat/completions`)
-
-3) (Optional) Enable Gemini for image chat (PPT slides):
-
-- PowerShell (current session):
-
-```powershell
-$env:GEMINI_API_KEY = "YOUR_KEY"
-```
-
-- CMD (current session):
-
-```bat
-set GEMINI_API_KEY=YOUR_KEY
-```
-
-4) Run the web dev server:
+3) Run the web dev server:
 
 ```bash
 cd web
@@ -205,8 +192,8 @@ Useful options:
 
 ## Future Extensions
 
-- Add fill-in-the-blank question types with normalized answer checking.
 - Render Markdown in questions and explanations for formulas, code blocks, and links.
 - Import / export question sets via the Web UI.
+- Refactor backend into a package (`routers/`, `services/`, `storage/`, `llm/`).
 
-Planned improvements: see [TODO.md](TODO.md).
+Full roadmap: see [TODO.md](TODO.md). Changelog: see [CHANGELOG.md](CHANGELOG.md).

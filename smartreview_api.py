@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import base64
+import hashlib
 import json
 import mimetypes
 import os
+import random
 import re
 import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -31,7 +38,7 @@ MAX_CONTEXT_CHARS = int(os.getenv("SMARTREVIEW_MAX_CONTEXT_CHARS", "120000"))
 MAX_GENERATED_QUESTIONS = int(os.getenv("SMARTREVIEW_MAX_GENERATED_QUESTIONS", "50"))
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 COURSE_FILE_NAME = "course.json"
 DEFAULT_CHAPTER_TITLE = os.getenv("SMARTREVIEW_DEFAULT_CHAPTER_TITLE", "General")
 DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -127,6 +134,7 @@ def _new_chapter(*, chapter_title: str) -> dict[str, Any]:
     return {
         "chapter_id": str(uuid4()),
         "chapter_title": chapter_title.strip(),
+        "materials": [],
         "questions": [],
     }
 
@@ -136,6 +144,8 @@ def _new_course(*, course_name: str) -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "course_id": str(uuid4()),
         "course_name": course_name.strip(),
+        "course_track": None,
+        "course_track_source": None,
         "chapters": [],
     }
 
@@ -152,6 +162,34 @@ def _course_question_count(course: dict[str, Any]) -> int:
         if isinstance(questions, list):
             total += len(questions)
     return total
+
+
+def _append_material(
+    chapter: dict[str, Any],
+    *,
+    filename: str,
+    page_count: int | None,
+    text: str,
+) -> None:
+    materials = chapter.get("materials")
+    if not isinstance(materials, list):
+        materials = []
+        chapter["materials"] = materials
+
+    clipped = (text or "").strip()[:MAX_CONTEXT_CHARS]
+    if not clipped:
+        return
+
+    materials.append(
+        {
+            "material_id": str(uuid4()),
+            "filename": (filename or "upload.txt").strip() or "upload.txt",
+            "page_count": int(page_count) if page_count is not None else None,
+            "char_count": len(clipped),
+            "text": clipped,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
 
 
 def _find_course_by_name(course_name: str) -> tuple[Path, dict[str, Any]] | None:
@@ -579,6 +617,21 @@ def import_text(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
             detail=f"questionCount too large (max {MAX_GENERATED_QUESTIONS})",
         )
 
+    filename_raw = payload.get("filename")
+    filename = str(filename_raw or "lecture.txt").strip() or "lecture.txt"
+
+    page_count_raw = payload.get("pageCount")
+    page_count: int | None
+    if page_count_raw is None:
+        page_count = None
+    else:
+        try:
+            page_count = int(page_count_raw)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail="pageCount must be an integer") from exc
+        if page_count < 0:
+            raise HTTPException(status_code=400, detail="pageCount must be >= 0")
+
     # LLM calls can be slow; do them outside the write lock.
     course_name, chapter_title = _classify_course_and_chapter(file_content=file_content)
 
@@ -649,6 +702,8 @@ def import_text(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
             existing_qs = []
             target_chapter["questions"] = existing_qs
         existing_qs.extend(normalized_questions)
+
+        _append_material(target_chapter, filename=filename, page_count=page_count, text=file_content)
 
         _atomic_write_json(course_file, course_latest)
 
@@ -862,6 +917,317 @@ def delete_chapter(course_id: str, chapter_id: str) -> dict[str, Any]:
         chapters.pop(target_idx)
         _atomic_write_json(course_file, course)
         return {"course": _build_course_summary(course), "library": list_courses()}
+
+
+def _collect_material_text(course: dict[str, Any], *, chapter_id: str | None) -> str:
+    texts: list[str] = []
+
+    def add_from_ch(ch: dict[str, Any]) -> None:
+        mats = ch.get("materials")
+        if not isinstance(mats, list):
+            return
+        for m in mats:
+            if not isinstance(m, dict):
+                continue
+            t = m.get("text")
+            if isinstance(t, str) and t.strip():
+                texts.append(t.strip())
+
+    chapters = course.get("chapters")
+    if isinstance(chapters, list):
+        if chapter_id:
+            for ch in chapters:
+                if isinstance(ch, dict) and str(ch.get("chapter_id") or "") == chapter_id:
+                    add_from_ch(ch)
+                    break
+        else:
+            for ch in chapters:
+                if isinstance(ch, dict):
+                    add_from_ch(ch)
+
+    if texts:
+        joined = "\n\n".join(texts)
+        return joined[:MAX_CONTEXT_CHARS]
+
+    # Fallback: build from existing questions
+    q_lines: list[str] = []
+    if isinstance(chapters, list):
+        for ch in chapters:
+            if not isinstance(ch, dict):
+                continue
+            if chapter_id and str(ch.get("chapter_id") or "") != chapter_id:
+                continue
+            for q in ch.get("questions") or []:
+                if not isinstance(q, dict):
+                    continue
+                qt = str(q.get("type") or "MCQ")
+                qq = str(q.get("question") or "")
+                q_lines.append(f"[{qt}] {qq}")
+                if qt == "MCQ":
+                    exp = q.get("explanation")
+                    if isinstance(exp, str) and exp.strip():
+                        q_lines.append("Explanation: " + exp.strip())
+                else:
+                    ans = q.get("answer")
+                    if isinstance(ans, str) and ans.strip():
+                        q_lines.append("Answer: " + ans.strip())
+
+    return "\n".join(q_lines)[:MAX_CONTEXT_CHARS]
+
+
+def _daily_seed_hash(
+    *, course_id: str, chapter_id: str | None, counts: dict[str, int]
+) -> tuple[str, str, int]:
+    seed_date = date.today().isoformat()
+    normalized_counts = json.dumps(
+        {k: int(v) for k, v in sorted(counts.items())}, separators=(",", ":")
+    )
+    payload = f"{course_id}|{chapter_id or ''}|{seed_date}|{normalized_counts}".encode("utf-8")
+    digest = hashlib.sha256(payload).hexdigest()
+    seed_int = int(digest[:16], 16)
+    return seed_date, digest, seed_int
+
+
+@app.post("/api/quiz/session")
+def create_quiz_session(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    _ensure_library_bootstrapped()
+
+    course_id = str(payload.get("courseId") or "").strip()
+    chapter_id_raw = payload.get("chapterId")
+    chapter_id = str(chapter_id_raw).strip() if chapter_id_raw is not None else None
+    course_track_req = str(payload.get("courseTrack") or "auto").strip().casefold()
+    counts_raw = payload.get("counts")
+
+    if not course_id:
+        raise HTTPException(status_code=400, detail="courseId is required")
+    if counts_raw is None or not isinstance(counts_raw, dict):
+        raise HTTPException(status_code=400, detail="counts must be an object")
+
+    allowed = {"MCQ", "FILL", "ESSAY", "PROOF"}
+    counts: dict[str, int] = {}
+    total = 0
+    for k in allowed:
+        v = counts_raw.get(k, 0)
+        try:
+            n = int(v)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"counts.{k} must be an integer") from exc
+        if n < 0:
+            raise HTTPException(status_code=400, detail=f"counts.{k} must be >= 0")
+        counts[k] = n
+        total += n
+
+    if total <= 0:
+        raise HTTPException(status_code=400, detail="At least one question must be requested")
+    if total > MAX_GENERATED_QUESTIONS:
+        raise HTTPException(
+            status_code=400, detail=f"Total question count too large (max {MAX_GENERATED_QUESTIONS})"
+        )
+
+    if course_track_req not in {"auto", "humanities", "stem"}:
+        raise HTTPException(status_code=400, detail="courseTrack must be auto|humanities|stem")
+
+    # Load course + validate chapter
+    with _data_write_lock():
+        course_file = _course_file_path(course_id)
+        if not course_file.exists():
+            raise HTTPException(status_code=404, detail="Course not found")
+        course = _load_json_file(course_file)
+        if not isinstance(course, dict):
+            raise HTTPException(status_code=500, detail="Invalid course data")
+
+        chapters = course.get("chapters")
+        if not isinstance(chapters, list):
+            raise HTTPException(status_code=500, detail="Invalid course chapters")
+
+        if chapter_id:
+            if not any(
+                isinstance(ch, dict) and str(ch.get("chapter_id") or "") == chapter_id
+                for ch in chapters
+            ):
+                raise HTTPException(status_code=404, detail="Chapter not found")
+
+        material_text = _collect_material_text(course, chapter_id=chapter_id)
+
+    # Determine effective track
+    existing_track = course.get("course_track")
+    existing_track_norm = str(existing_track).strip().casefold() if existing_track else None
+
+    effective_track: str
+    track_source: str
+    if course_track_req in {"humanities", "stem"}:
+        effective_track = course_track_req
+        track_source = "manual"
+        with _data_write_lock():
+            course_latest = _load_json_file(_course_file_path(course_id))
+            if not isinstance(course_latest, dict):
+                raise HTTPException(status_code=500, detail="Invalid course data")
+            course_latest["course_track"] = effective_track
+            course_latest["course_track_source"] = track_source
+            _atomic_write_json(_course_file_path(course_id), course_latest)
+    else:
+        if existing_track_norm in {"humanities", "stem"}:
+            effective_track = existing_track_norm
+            track_source = str(course.get("course_track_source") or "auto")
+        else:
+            if not material_text.strip():
+                raise HTTPException(
+                    status_code=400, detail="No materials available. Upload a PDF first."
+                )
+            effective_track = _classify_course_track(text=material_text)
+            track_source = "auto"
+            with _data_write_lock():
+                course_latest2 = _load_json_file(_course_file_path(course_id))
+                if not isinstance(course_latest2, dict):
+                    raise HTTPException(status_code=500, detail="Invalid course data")
+                if not str(course_latest2.get("course_track") or "").strip():
+                    course_latest2["course_track"] = effective_track
+                    course_latest2["course_track_source"] = track_source
+                    _atomic_write_json(_course_file_path(course_id), course_latest2)
+
+    # Count available questions by type in scope
+    with _data_write_lock():
+        course_latest3 = _load_json_file(_course_file_path(course_id))
+        if not isinstance(course_latest3, dict):
+            raise HTTPException(status_code=500, detail="Invalid course data")
+        chapters_latest = course_latest3.get("chapters")
+        if not isinstance(chapters_latest, list):
+            raise HTTPException(status_code=500, detail="Invalid course chapters")
+
+        scoped_questions: list[dict[str, Any]] = []
+        for ch in chapters_latest:
+            if not isinstance(ch, dict):
+                continue
+            if chapter_id and str(ch.get("chapter_id") or "") != chapter_id:
+                continue
+            qs = ch.get("questions")
+            if isinstance(qs, list):
+                scoped_questions.extend([q for q in qs if isinstance(q, dict)])
+
+        available_by_type: dict[str, list[dict[str, Any]]] = {k: [] for k in allowed}
+        for q in scoped_questions:
+            qt = str(q.get("type") or "MCQ").strip().upper()
+            if qt in allowed:
+                available_by_type[qt].append(q)
+
+    missing: dict[str, int] = {
+        k: max(0, counts[k] - len(available_by_type[k])) for k in allowed
+    }
+
+    # Fill gaps if needed
+    if any(v > 0 for v in missing.values()):
+        if not material_text.strip():
+            material_text = _collect_material_text(course_latest3, chapter_id=chapter_id)
+        if not material_text.strip():
+            raise HTTPException(
+                status_code=400, detail="No materials available. Upload a PDF first."
+            )
+
+        generated = _generate_questions_from_material(
+            material_text=material_text,
+            course_name=str(course_latest3.get("course_name") or "Course"),
+            course_track=effective_track,
+            missing_counts=missing,
+        )
+
+        if generated:
+            with _data_write_lock():
+                course_latest4 = _load_json_file(_course_file_path(course_id))
+                if not isinstance(course_latest4, dict):
+                    raise HTTPException(status_code=500, detail="Invalid course data")
+
+                chapters2 = course_latest4.get("chapters")
+                if not isinstance(chapters2, list):
+                    raise HTTPException(status_code=500, detail="Invalid course chapters")
+
+                target_ch: dict[str, Any] | None = None
+                if chapter_id:
+                    for ch in chapters2:
+                        if isinstance(ch, dict) and str(ch.get("chapter_id") or "") == chapter_id:
+                            target_ch = ch
+                            break
+                else:
+                    for ch in chapters2:
+                        if isinstance(ch, dict) and _normalize_key(
+                            str(ch.get("chapter_title") or "")
+                        ) == _normalize_key(DEFAULT_CHAPTER_TITLE):
+                            target_ch = ch
+                            break
+                    if target_ch is None:
+                        target_ch = _new_chapter(chapter_title=DEFAULT_CHAPTER_TITLE)
+                        chapters2.append(target_ch)
+
+                if target_ch is None:
+                    raise HTTPException(status_code=500, detail="Failed to select generation chapter")
+
+                existing_qs = target_ch.get("questions")
+                if not isinstance(existing_qs, list):
+                    existing_qs = []
+                    target_ch["questions"] = existing_qs
+
+                start_id = _max_question_id(course_latest4) + 1
+                for idx, q in enumerate(generated, start=0):
+                    q["id"] = start_id + idx
+                existing_qs.extend(generated)
+
+                _atomic_write_json(_course_file_path(course_id), course_latest4)
+
+    # Reload final and sample deterministically
+    course_final = _load_json_file(_course_file_path(course_id))
+    if not isinstance(course_final, dict):
+        raise HTTPException(status_code=500, detail="Invalid course data")
+
+    chapters_final = course_final.get("chapters")
+    if not isinstance(chapters_final, list):
+        raise HTTPException(status_code=500, detail="Invalid course chapters")
+
+    scoped_final: list[dict[str, Any]] = []
+    for ch in chapters_final:
+        if not isinstance(ch, dict):
+            continue
+        if chapter_id and str(ch.get("chapter_id") or "") != chapter_id:
+            continue
+        qs = ch.get("questions")
+        if isinstance(qs, list):
+            scoped_final.extend([q for q in qs if isinstance(q, dict)])
+
+    by_type: dict[str, list[dict[str, Any]]] = {k: [] for k in allowed}
+    for q in scoped_final:
+        qt = str(q.get("type") or "MCQ").strip().upper()
+        if qt in allowed:
+            by_type[qt].append(q)
+
+    for k in allowed:
+        by_type[k].sort(key=lambda q: int(q.get("id") or 0))
+
+    seed_date, seed_hash, seed_int = _daily_seed_hash(
+        course_id=course_id, chapter_id=chapter_id, counts=counts
+    )
+    rng = random.Random(seed_int)
+
+    selected: list[dict[str, Any]] = []
+    for k in ["MCQ", "FILL", "ESSAY", "PROOF"]:
+        need = counts[k]
+        pool = by_type[k]
+        if need <= 0:
+            continue
+        if len(pool) < need:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Insufficient questions after generation for type {k}",
+            )
+        selected.extend(rng.sample(pool, need))
+
+    rng.shuffle(selected)
+
+    return {
+        "course_id": course_id,
+        "chapter_id": chapter_id,
+        "course_track": effective_track,
+        "seed_date": seed_date,
+        "seed_hash": seed_hash,
+        "questions": selected,
+    }
 
 
 def _extract_pdf_text(pdf_bytes: bytes) -> tuple[str, int]:
@@ -1131,6 +1497,236 @@ def _validate_course_data(raw: Any) -> dict[str, Any]:
 
     normalized_questions.sort(key=lambda item: item["id"])
     return {"course_name": course_name.strip(), "questions": normalized_questions}
+
+
+def _normalize_question_type(value: Any) -> str:
+    raw = str(value or "MCQ").strip().upper()
+    if raw in {"MCQ", "FILL", "ESSAY", "PROOF"}:
+        return raw
+    raise ValueError("type must be one of MCQ, FILL, ESSAY, PROOF")
+
+
+def _optional_float(value: Any, *, field: str) -> float | None:
+    if value is None:
+        return None
+    try:
+        f = float(value)
+    except Exception as exc:
+        raise ValueError(f"{field} must be a number") from exc
+    if f < 0:
+        raise ValueError(f"{field} must be >= 0")
+    return f
+
+
+def _validate_question_v3(q: Any, *, index: int) -> dict[str, Any]:
+    if not isinstance(q, dict):
+        raise ValueError(f"questions[{index}] must be an object")
+
+    q_type = _normalize_question_type(q.get("type", "MCQ"))
+
+    question_text = q.get("question")
+    if not isinstance(question_text, str) or not question_text.strip():
+        raise ValueError(f"questions[{index}].question must be a non-empty string")
+
+    q_id_raw = q.get("id", index)
+    try:
+        q_id = int(q_id_raw)
+    except Exception as exc:
+        raise ValueError(f"questions[{index}].id must be an integer") from exc
+
+    if q_type == "MCQ":
+        options = q.get("options")
+        if not isinstance(options, dict):
+            raise ValueError(f"questions[{index}].options must be an object")
+        if set(options.keys()) != {"A", "B", "C", "D"}:
+            raise ValueError(f"questions[{index}].options must contain exactly A, B, C, D")
+
+        answer = _normalize_answer_key(q.get("answer"))
+
+        explanation = q.get("explanation")
+        if not isinstance(explanation, str) or not explanation.strip():
+            raise ValueError(f"questions[{index}].explanation must be a non-empty string")
+
+        return {
+            "id": q_id,
+            "type": "MCQ",
+            "question": question_text.strip(),
+            "options": {
+                "A": str(options["A"]),
+                "B": str(options["B"]),
+                "C": str(options["C"]),
+                "D": str(options["D"]),
+            },
+            "answer": answer,
+            "explanation": explanation.strip(),
+        }
+
+    if q_type == "FILL":
+        answers = q.get("answers")
+        if not isinstance(answers, list) or not answers:
+            raise ValueError(f"questions[{index}].answers must be a non-empty array")
+        norm_answers: list[str] = []
+        for a in answers:
+            s = str(a).strip()
+            if not s:
+                continue
+            norm_answers.append(s)
+        if not norm_answers:
+            raise ValueError(f"questions[{index}].answers must contain non-empty strings")
+
+        tolerance = _optional_float(q.get("tolerance"), field=f"questions[{index}].tolerance")
+
+        explanation_raw = q.get("explanation")
+        explanation: str | None
+        if explanation_raw is None:
+            explanation = None
+        else:
+            if not isinstance(explanation_raw, str) or not explanation_raw.strip():
+                raise ValueError(f"questions[{index}].explanation must be a non-empty string when provided")
+            explanation = explanation_raw.strip()
+
+        out: dict[str, Any] = {
+            "id": q_id,
+            "type": "FILL",
+            "question": question_text.strip(),
+            "answers": norm_answers,
+        }
+        if tolerance is not None:
+            out["tolerance"] = tolerance
+        if explanation is not None:
+            out["explanation"] = explanation
+        return out
+
+    # ESSAY / PROOF
+    answer_text = q.get("answer")
+    if not isinstance(answer_text, str) or not answer_text.strip():
+        raise ValueError(f"questions[{index}].answer must be a non-empty string")
+
+    return {
+        "id": q_id,
+        "type": q_type,
+        "question": question_text.strip(),
+        "answer": answer_text.strip(),
+    }
+
+
+def _validate_questions_v3(raw_questions: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_questions, list) or not raw_questions:
+        raise ValueError("questions must be a non-empty array")
+
+    normalized: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    for idx, q in enumerate(raw_questions, start=1):
+        n = _validate_question_v3(q, index=idx)
+        qid = int(n["id"])
+        if qid in seen_ids:
+            raise ValueError(f"Duplicate question id: {qid}")
+        seen_ids.add(qid)
+        normalized.append(n)
+
+    normalized.sort(key=lambda item: int(item["id"]))
+    return normalized
+
+
+def _classify_course_track(*, text: str) -> str:
+    clipped = (text or "").strip()[:MAX_CONTEXT_CHARS]
+    if not clipped:
+        raise HTTPException(status_code=400, detail="No material text available for course track classification")
+
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    base_url = os.getenv("DEEPSEEK_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL)
+    model = os.getenv("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL)
+
+    system = (
+        "You classify courses into humanities or stem. "
+        "Return ONLY JSON: {\"course_track\": \"humanities\"|\"stem\"}."
+    )
+    user = "Text:\n" + clipped
+
+    raw = _deepseek_chat_completions(
+        api_key=api_key or "",
+        base_url=base_url,
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=0.0,
+    )
+
+    parsed = _extract_json_object(raw)
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=502, detail="Classifier output must be a JSON object")
+
+    track = str(parsed.get("course_track") or "").strip().casefold()
+    if track not in {"humanities", "stem"}:
+        raise HTTPException(status_code=502, detail="Classifier returned invalid course_track")
+    return track
+
+
+def _generate_questions_from_material(
+    *,
+    material_text: str,
+    course_name: str,
+    course_track: str,
+    missing_counts: dict[str, int],
+) -> list[dict[str, Any]]:
+    clipped = (material_text or "").strip()[:MAX_CONTEXT_CHARS]
+    if not clipped:
+        raise HTTPException(status_code=400, detail="No material text available for question generation")
+
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    base_url = os.getenv("DEEPSEEK_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL)
+    model = os.getenv("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL)
+
+    wanted = {k: int(v) for k, v in missing_counts.items() if int(v) > 0}
+    if not wanted:
+        return []
+
+    system = (
+        "You are an expert instructor and exam writer. "
+        "Create questions strictly grounded in the provided material. "
+        "Return ONLY a single JSON object with key 'questions'."
+    )
+
+    user = (
+        f"Course name: {course_name}\n"
+        f"Course track: {course_track} (humanities|stem)\n"
+        f"Generate counts (only these types): {json.dumps(wanted)}\n\n"
+        "Output JSON schema:\n"
+        "{\n"
+        "  \"questions\": [\n"
+        "    (MCQ) {id:int, type:\"MCQ\", question:str, options:{A,B,C,D}, answer:A|B|C|D, explanation:str},\n"
+        "    (FILL) {id:int, type:\"FILL\", question:str, answers:[str,...], tolerance?:number, explanation?:str},\n"
+        "    (ESSAY) {id:int, type:\"ESSAY\", question:str, answer:str},\n"
+        "    (PROOF) {id:int, type:\"PROOF\", question:str, answer:str}\n"
+        "  ]\n"
+        "}\n\n"
+        "MATERIAL:\n"
+        + clipped
+    )
+
+    raw = _deepseek_chat_completions(
+        api_key=api_key or "",
+        base_url=base_url,
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=0.2,
+    )
+
+    parsed = _extract_json_object(raw)
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("questions"), list):
+        raise HTTPException(status_code=502, detail="Generator returned invalid JSON schema")
+
+    normalized = _validate_questions_v3(parsed.get("questions"))
+
+    for idx, q in enumerate(normalized, start=1):
+        q["id"] = idx
+
+    return normalized
 
 
 def _generate_mcq_course_from_lecture(

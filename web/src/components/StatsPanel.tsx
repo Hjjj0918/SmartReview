@@ -92,9 +92,9 @@ export default function StatsPanel({
           <div className="bg-indigo-50 rounded-xl p-3">
             <Trophy size={18} className="text-indigo-500 mx-auto mb-1" />
             <div className="text-lg font-bold text-indigo-700 tabular-nums">
-              {stats.correct}/{stats.total}
+              {stats.correct}/{stats.scoredTotal}
             </div>
-            <div className="text-xs text-indigo-400">Correct</div>
+            <div className="text-xs text-indigo-400">Correct (MCQ+FILL)</div>
           </div>
           <div className="bg-amber-50 rounded-xl p-3">
             <Clock size={18} className="text-amber-500 mx-auto mb-1" />

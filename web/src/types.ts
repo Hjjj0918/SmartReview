@@ -1,13 +1,38 @@
-export interface Question {
+export type QuestionType = 'MCQ' | 'FILL' | 'ESSAY' | 'PROOF';
+
+export interface BaseQuestion {
   id: number;
-  type: 'MCQ';
+  type: QuestionType;
   question: string;
+}
+
+export type AnswerKey = 'A' | 'B' | 'C' | 'D';
+
+export interface MCQQuestion extends BaseQuestion {
+  type: 'MCQ';
   options: Record<AnswerKey, string>;
   answer: AnswerKey;
   explanation: string;
 }
 
-export type AnswerKey = 'A' | 'B' | 'C' | 'D';
+export interface FillQuestion extends BaseQuestion {
+  type: 'FILL';
+  answers: string[];
+  tolerance?: number;
+  explanation?: string;
+}
+
+export interface EssayQuestion extends BaseQuestion {
+  type: 'ESSAY';
+  answer: string;
+}
+
+export interface ProofQuestion extends BaseQuestion {
+  type: 'PROOF';
+  answer: string;
+}
+
+export type Question = MCQQuestion | FillQuestion | EssayQuestion | ProofQuestion;
 
 export interface ChapterData {
   chapter_id: string;
@@ -19,6 +44,8 @@ export interface CourseData {
   schema_version?: number;
   course_id: string;
   course_name: string;
+  course_track?: 'humanities' | 'stem' | null;
+  course_track_source?: 'auto' | 'manual' | null;
   chapters: ChapterData[];
 }
 
@@ -57,13 +84,32 @@ export interface QuizSource {
 
 export interface AnswerRecord {
   questionId: number;
-  selected: AnswerKey;
-  correct: boolean;
+  questionType: QuestionType;
+  scored: boolean;
+  correct: boolean | null;
+  response?: string;
 }
 
 export interface QuizStats {
   total: number;
+  scoredTotal: number;
   correct: number;
   accuracy: number;
-  duration: number; // ms
+  duration: number;
+}
+
+export interface QuizSessionRequest {
+  courseId: string;
+  chapterId: string | null;
+  courseTrack: 'auto' | 'humanities' | 'stem';
+  counts: Record<QuestionType, number>;
+}
+
+export interface QuizSessionResponse {
+  course_id: string;
+  chapter_id: string | null;
+  course_track: 'humanities' | 'stem';
+  seed_date: string;
+  seed_hash: string;
+  questions: Question[];
 }
