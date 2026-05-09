@@ -2,12 +2,21 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GraduationCap, ArrowLeft } from 'lucide-react';
 import { useQuiz } from './hooks/useQuiz';
-import type { CourseData, CourseSummary, QuizSource } from './types';
+import type {
+  CourseData,
+  CourseSummary,
+  QuizSource,
+  QuestionType,
+  QuizSessionRequest,
+  QuizSessionResponse,
+} from './types';
 import Sidebar from './components/Sidebar';
 import ProgressBar from './components/ProgressBar';
 import QuizCard from './components/QuizCard';
 import StatsPanel from './components/StatsPanel';
 import FocusToggle from './components/FocusToggle';
+import QuizSetupCard from './components/QuizSetupCard';
+import { createQuizSession } from './api/quiz';
 import {
   fetchCourse,
   fetchLibrarySummary,
@@ -19,6 +28,18 @@ import {
   deleteChapter,
 } from './api/library';
 
+const MAX_QUIZ_TOTAL = 50;
+
+const DEFAULT_COUNTS_AUTO: Record<QuestionType, number> = {
+  MCQ: 20, FILL: 0, ESSAY: 0, PROOF: 0,
+};
+const DEFAULT_COUNTS_HUMANITIES: Record<QuestionType, number> = {
+  MCQ: 12, FILL: 0, ESSAY: 8, PROOF: 0,
+};
+const DEFAULT_COUNTS_STEM: Record<QuestionType, number> = {
+  MCQ: 12, FILL: 6, ESSAY: 0, PROOF: 2,
+};
+
 export default function App() {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
@@ -28,6 +49,10 @@ export default function App() {
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [activeCourse, setActiveCourse] = useState<CourseData | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+
+  const [quizSession, setQuizSession] = useState<QuizSessionResponse | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [isStartingSession, setIsStartingSession] = useState(false);
 
   const courseLoadSeq = useRef(0);
 
@@ -58,14 +83,6 @@ export default function App() {
     );
   }, [activeChapterId, activeCourse]);
 
-  const selectedQuestions = useMemo(() => {
-    if (!activeCourse) return [];
-    if (!activeChapterId) {
-      return activeCourse.chapters.flatMap((ch) => ch.questions);
-    }
-    return selectedChapter?.questions ?? [];
-  }, [activeChapterId, activeCourse, selectedChapter]);
-
   const quizTitle = useMemo(() => {
     if (!activeCourse) return '';
     if (!activeChapterId) return activeCourse.course_name;
@@ -75,16 +92,59 @@ export default function App() {
       : activeCourse.course_name;
   }, [activeChapterId, activeCourse, selectedChapter?.chapter_title]);
 
+  const quizQuestions = useMemo(
+    () => quizSession?.questions ?? [],
+    [quizSession],
+  );
+
   const quizSource = useMemo(
-    (): QuizSource => ({ title: quizTitle, questions: selectedQuestions }),
-    [quizTitle, selectedQuestions],
+    (): QuizSource => ({ title: quizTitle, questions: quizQuestions }),
+    [quizTitle, quizQuestions],
   );
 
   const quiz = useQuiz(quizSource);
 
+  const defaultTrack = useMemo<'auto' | 'humanities' | 'stem'>(() => {
+    const track = activeCourse?.course_track ?? null;
+    if (track === 'humanities' || track === 'stem') return track;
+    return 'auto';
+  }, [activeCourse?.course_track]);
+
+  const defaultCounts = useMemo((): Record<QuestionType, number> => {
+    const track = activeCourse?.course_track ?? null;
+    if (track === 'humanities') return DEFAULT_COUNTS_HUMANITIES;
+    if (track === 'stem') return DEFAULT_COUNTS_STEM;
+    return DEFAULT_COUNTS_AUTO;
+  }, [activeCourse?.course_track]);
+
+  const handleStartSession = useCallback(
+    async (req: QuizSessionRequest) => {
+      setSessionError(null);
+      setIsStartingSession(true);
+      try {
+        const session = await createQuizSession(req);
+        setQuizSession(session);
+        quiz.actions.reset();
+        setActiveCourse((prev) =>
+          prev ? { ...prev, course_track: session.course_track } : prev,
+        );
+        void refreshLibrary();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to start quiz session';
+        setSessionError(message);
+      } finally {
+        setIsStartingSession(false);
+      }
+    },
+    [quiz.actions, refreshLibrary],
+  );
+
   const handleSelectCourse = useCallback(
     async (courseId: string) => {
       quiz.actions.reset();
+      setQuizSession(null);
+      setSessionError(null);
+      setIsStartingSession(false);
 
       setLibraryError(null);
       setActiveCourseId(courseId);
@@ -109,6 +169,9 @@ export default function App() {
   const handleSelectChapter = useCallback(
     async (courseId: string, chapterId: string) => {
       quiz.actions.reset();
+      setQuizSession(null);
+      setSessionError(null);
+      setIsStartingSession(false);
 
       setLibraryError(null);
       setActiveCourseId(courseId);
@@ -252,6 +315,8 @@ export default function App() {
   }, []);
 
   // Focus toggle rendered via portal to document.body — works on all screens
+  const hasSession = quizSession !== null && quizQuestions.length > 0;
+
   const focusToggle = (
     <FocusToggle isVisible={isFocused} onToggle={handleToggleFocus} />
   );
@@ -335,8 +400,8 @@ export default function App() {
         />
 
         <main className="flex-1 flex flex-col min-w-0">
-          {/* Top bar */}
-          {!quiz.state.isComplete && (
+          {/* Top bar (only during active session) */}
+          {hasSession && !quiz.state.isComplete && (
             <header className="h-16 shrink-0 flex items-center px-6 border-b border-slate-200/70 bg-white/80 backdrop-blur-sm">
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className="min-w-0">
@@ -348,7 +413,7 @@ export default function App() {
               </div>
               <ProgressBar
                 current={quiz.state.currentIndex}
-                total={selectedQuestions.length}
+                total={quizQuestions.length}
                 progress={quiz.progress}
               />
             </header>
@@ -372,6 +437,36 @@ export default function App() {
                       onChangeCourse={handleChangeCourse}
                     />
                   </motion.div>
+                ) : !hasSession ? (
+                  <motion.div
+                    key="setup"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="w-full"
+                  >
+                    {isFocused && (
+                      <button
+                        onClick={handleChangeCourse}
+                        className="mb-4 flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        <ArrowLeft size={14} />
+                        All Courses
+                      </button>
+                    )}
+
+                    <QuizSetupCard
+                      key={`${activeCourseId}:${activeChapterId ?? 'all'}`}
+                      courseId={activeCourse!.course_id}
+                      chapterId={activeChapterId}
+                      defaultTrack={defaultTrack}
+                      defaultCounts={defaultCounts}
+                      maxTotal={MAX_QUIZ_TOTAL}
+                      isStarting={isStartingSession}
+                      error={sessionError}
+                      onStart={handleStartSession}
+                    />
+                  </motion.div>
                 ) : (
                   <motion.div
                     key={quiz.state.currentIndex}
@@ -380,7 +475,6 @@ export default function App() {
                     exit={{ opacity: 0 }}
                     className="w-full"
                   >
-                    {/* Course back button (shown when question area is visible) */}
                     {isFocused && (
                       <button
                         onClick={handleChangeCourse}
@@ -393,12 +487,15 @@ export default function App() {
                     <QuizCard
                       question={quiz.currentQuestion}
                       selectedAnswer={quiz.state.selectedAnswer}
+                      fillDraft={quiz.state.fillDraft}
                       isSubmitted={quiz.state.isSubmitted}
                       showExplanation={quiz.state.showExplanation}
+                      answerRecord={quiz.currentAnswerRecord}
                       isLastQuestion={
-                        quiz.state.currentIndex === selectedQuestions.length - 1
+                        quiz.state.currentIndex === quizQuestions.length - 1
                       }
                       onSelect={quiz.actions.selectAnswer}
+                      onFillDraftChange={quiz.actions.setFillDraft}
                       onSubmit={quiz.actions.submitAnswer}
                       onNext={quiz.actions.nextQuestion}
                     />

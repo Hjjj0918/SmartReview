@@ -10,6 +10,7 @@ import type {
 export interface QuizState {
   currentIndex: number;
   selectedAnswer: AnswerKey | null;
+  fillDraft: string;
   isSubmitted: boolean;
   showExplanation: boolean;
   answers: AnswerRecord[];
@@ -20,6 +21,7 @@ export interface QuizState {
 
 export interface QuizActions {
   selectAnswer: (key: AnswerKey) => void;
+  setFillDraft: (text: string) => void;
   submitAnswer: () => void;
   nextQuestion: () => void;
   reset: () => void;
@@ -34,9 +36,57 @@ const EMPTY_QUESTION: Question = {
   explanation: '',
 };
 
+function normalizeText(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '');
+}
+
+function tryParseNumber(s: string): number | null {
+  const t = s.trim();
+  if (!t) return null;
+
+  const fracMatch = t.match(
+    /^([+-]?\d+(?:\.\d+)?)\s*\/\s*([+-]?\d+(?:\.\d+)?)$/,
+  );
+  if (fracMatch) {
+    const num = Number(fracMatch[1]);
+    const den = Number(fracMatch[2]);
+    if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
+      return num / den;
+    }
+    return null;
+  }
+
+  const n = Number(t);
+  if (Number.isFinite(n)) return n;
+  return null;
+}
+
+function isFillCorrect(
+  input: string,
+  answers: string[],
+  tolerance: number,
+): boolean {
+  const inputNum = tryParseNumber(input);
+  if (inputNum !== null) {
+    for (const a of answers) {
+      const an = tryParseNumber(a);
+      if (an === null) continue;
+      if (Math.abs(inputNum - an) <= tolerance) return true;
+    }
+  }
+
+  const ni = normalizeText(input);
+  return answers.some((a) => normalizeText(a) === ni);
+}
+
 export function useQuiz(source: QuizSource): {
   state: QuizState;
   currentQuestion: Question;
+  currentAnswerRecord: AnswerRecord | null;
   progress: number;
   stats: QuizStats | null;
   actions: QuizActions;
@@ -46,6 +96,7 @@ export function useQuiz(source: QuizSource): {
   const [quizState, setQuizState] = useState<QuizState>({
     currentIndex: 0,
     selectedAnswer: null,
+    fillDraft: '',
     isSubmitted: false,
     showExplanation: false,
     answers: [],
@@ -59,6 +110,14 @@ export function useQuiz(source: QuizSource): {
     [questions, quizState.currentIndex],
   );
 
+  const currentAnswerRecord = useMemo((): AnswerRecord | null => {
+    if (!quizState.isSubmitted) return null;
+    const last = quizState.answers[quizState.answers.length - 1];
+    if (!last) return null;
+    if (last.questionId !== currentQuestion.id) return null;
+    return last;
+  }, [quizState.answers, quizState.isSubmitted, currentQuestion.id]);
+
   const progress = useMemo(() => {
     if (questions.length === 0) return 0;
     return (
@@ -70,12 +129,15 @@ export function useQuiz(source: QuizSource): {
 
   const stats = useMemo((): QuizStats | null => {
     if (!quizState.isComplete) return null;
-    const correct = quizState.answers.filter((a) => a.correct).length;
+    const scoredTotal = quizState.answers.filter((a) => a.scored).length;
+    const correct = quizState.answers.filter((a) => a.scored && a.correct).length;
     const endTime = quizState.endTime ?? Date.now();
     return {
       total: quizState.answers.length,
+      scoredTotal,
       correct,
-      accuracy: Math.round((correct / quizState.answers.length) * 100),
+      accuracy:
+        scoredTotal === 0 ? 0 : Math.round((correct / scoredTotal) * 100),
       duration: endTime - quizState.startTime,
     };
   }, [
@@ -85,22 +147,81 @@ export function useQuiz(source: QuizSource): {
     quizState.endTime,
   ]);
 
-  const selectAnswer = useCallback((key: AnswerKey) => {
-    setQuizState((prev) => {
-      if (prev.isSubmitted) return prev;
-      return {
-        ...prev,
-        selectedAnswer: prev.selectedAnswer === key ? null : key,
-      };
-    });
-  }, []);
+  const selectAnswer = useCallback(
+    (key: AnswerKey) => {
+      setQuizState((prev) => {
+        if (prev.isSubmitted) return prev;
+        const current = questions[prev.currentIndex];
+        if (!current || current.type !== 'MCQ') return prev;
+        return {
+          ...prev,
+          selectedAnswer: prev.selectedAnswer === key ? null : key,
+        };
+      });
+    },
+    [questions],
+  );
+
+  const setFillDraft = useCallback(
+    (text: string) => {
+      setQuizState((prev) => {
+        if (prev.isSubmitted) return prev;
+        const current = questions[prev.currentIndex];
+        if (!current || current.type !== 'FILL') return prev;
+        return { ...prev, fillDraft: text };
+      });
+    },
+    [questions],
+  );
 
   const submitAnswer = useCallback(() => {
     setQuizState((prev) => {
-      if (prev.isSubmitted || prev.selectedAnswer === null) return prev;
+      if (prev.isSubmitted) return prev;
       const current = questions[prev.currentIndex];
       if (!current) return prev;
-      const isCorrect = prev.selectedAnswer === current.answer;
+
+      if (current.type === 'MCQ') {
+        if (prev.selectedAnswer === null) return prev;
+        const isCorrect = prev.selectedAnswer === current.answer;
+        return {
+          ...prev,
+          isSubmitted: true,
+          showExplanation: true,
+          answers: [
+            ...prev.answers,
+            {
+              questionId: current.id,
+              questionType: 'MCQ' as const,
+              scored: true,
+              correct: isCorrect,
+              response: prev.selectedAnswer,
+            },
+          ],
+        };
+      }
+
+      if (current.type === 'FILL') {
+        const response = prev.fillDraft.trim();
+        if (!response) return prev;
+        const tolerance = current.tolerance ?? 0;
+        const isCorrect = isFillCorrect(response, current.answers, tolerance);
+        return {
+          ...prev,
+          isSubmitted: true,
+          showExplanation: true,
+          answers: [
+            ...prev.answers,
+            {
+              questionId: current.id,
+              questionType: 'FILL' as const,
+              scored: true,
+              correct: isCorrect,
+              response,
+            },
+          ],
+        };
+      }
+
       return {
         ...prev,
         isSubmitted: true,
@@ -109,8 +230,9 @@ export function useQuiz(source: QuizSource): {
           ...prev.answers,
           {
             questionId: current.id,
-            selected: prev.selectedAnswer,
-            correct: isCorrect,
+            questionType: current.type,
+            scored: false,
+            correct: null,
           },
         ],
       };
@@ -127,6 +249,7 @@ export function useQuiz(source: QuizSource): {
         ...prev,
         currentIndex: nextIndex,
         selectedAnswer: null,
+        fillDraft: '',
         isSubmitted: false,
         showExplanation: false,
       };
@@ -137,6 +260,7 @@ export function useQuiz(source: QuizSource): {
     setQuizState({
       currentIndex: 0,
       selectedAnswer: null,
+      fillDraft: '',
       isSubmitted: false,
       showExplanation: false,
       answers: [],
@@ -147,9 +271,16 @@ export function useQuiz(source: QuizSource): {
   }, []);
 
   const actions = useMemo(
-    () => ({ selectAnswer, submitAnswer, nextQuestion, reset }),
-    [selectAnswer, submitAnswer, nextQuestion, reset],
+    () => ({ selectAnswer, setFillDraft, submitAnswer, nextQuestion, reset }),
+    [selectAnswer, setFillDraft, submitAnswer, nextQuestion, reset],
   );
 
-  return { state: quizState, currentQuestion, progress, stats, actions };
+  return {
+    state: quizState,
+    currentQuestion,
+    currentAnswerRecord,
+    progress,
+    stats,
+    actions,
+  };
 }

@@ -90,7 +90,14 @@ A modern, responsive single-page app built with **React**, **Tailwind CSS**, and
   - Correct → green background + subtle bounce
   - Incorrect → red background + horizontal shake
 - **Explanation panel** — slides in after submission, showing the correct answer and explanation.
-- **Stats summary** — animated score ring, accuracy, duration, and correct count after completing a course.
+- **Multi-type questions** — supports MCQ, Fill-in-the-blank (FILL), Essay (ESSAY), and Proof (PROOF).
+  - FILL: numeric tolerance matching + text normalization.
+  - ESSAY/PROOF: reference answer reveal only (no auto-grading).
+- **Quiz setup** — before starting, choose course track (Auto / Humanities / STEM) and question counts per type.
+  - Auto-detection of course track via LLM based on uploaded materials.
+  - Daily-deterministic question sampling (same config → same questions on the same day).
+  - Auto gap-filling: if the question bank runs short, DeepSeek generates new questions from materials.
+- **Stats summary** — animated score ring, accuracy (MCQ+FILL only), duration, and correct count after completing a course.
 
 ### Tech Stack
 
