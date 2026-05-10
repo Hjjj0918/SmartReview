@@ -1,199 +1,197 @@
-# SmartReview
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/SmartReview-v2.2-indigo?style=for-the-badge&logo=readthedocs&logoColor=white">
+    <img src="https://img.shields.io/badge/SmartReview-v2.2-indigo?style=for-the-badge&logo=readthedocs&logoColor=white" alt="SmartReview">
+  </picture>
+</p>
 
-SmartReview is a lightweight study tool for course-based self-review with AI-generated questions. Supports **MCQ**, **fill-in-the-blank**, **essay**, and **proof** question types. Runs in both **CLI mode** (V1) and **Web UI** (V2).
+<p align="center">
+  <a href="README.zh-CN.md"><b>🇨🇳 中文</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/your-username/smartreview"><b>GitHub</b></a>
+</p>
 
-## Project Structure
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/react-18-61DAFB?logo=react&logoColor=white" alt="React">
+  <img src="https://img.shields.io/badge/typescript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/fastapi-0.115-009688?logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/vite-6-646CFF?logo=vite&logoColor=white" alt="Vite">
+  <img src="https://img.shields.io/badge/tailwind-3-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/license-AGPL_v3-blue" alt="License AGPLv3">
+  <img src="https://img.shields.io/badge/tests-12%20passed-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/status-active-success" alt="Status">
+  <img src="https://img.shields.io/badge/PRs-welcome-blue" alt="PRs Welcome">
+</p>
+
+<br>
+
+> AI-powered self-review. Upload your lecture notes, generate MCQs & proofs, and study smarter — on the web or in your terminal.
+
+<br>
+
+## ✨ Features
+
+<table>
+<tr>
+<td width="50%">
+
+### 🧠 AI Question Generation
+Upload lecture PDFs and let **DeepSeek** generate high-quality questions grounded in your materials. Auto-detects course type (STEM vs Humanities) and fills gaps on demand.
+
+</td>
+<td width="50%">
+
+### 📝 Four Question Types
+- **MCQ** — multiple-choice with explanation
+- **FILL** — fill-in-the-blank with numeric tolerance
+- **ESSAY** — reference answer reveal
+- **PROOF** — proof sketch for STEM courses
+
+</td>
+</tr>
+<tr>
+<td>
+
+### 🎨 Modern Web UI
+React + Tailwind + Framer Motion. Animated quiz cards, focus mode, progress tracking, sidebar course management — all with smooth transitions.
+
+</td>
+<td>
+
+### 🗂️ Course & Chapter CRUD
+Create, rename, delete courses and chapters from the sidebar. Hover for quick actions, double-click to rename, context menu for more.
+
+</td>
+</tr>
+<tr>
+<td>
+
+### 📊 Smart Statistics
+Animated score ring, accuracy (MCQ+FILL only), duration tracking. Daily-deterministic question sampling — same config, same questions.
+
+</td>
+<td>
+
+### 🖥️ CLI + Web
+Originally a Python CLI tool. Now ships with a full FastAPI backend + React frontend. Use whichever fits your workflow.
+
+</td>
+</tr>
+</table>
+
+<br>
+
+## 🚀 Quick Start
+
+> **Prerequisites:** Python 3.11+, Node.js 18+, [DeepSeek API key](https://platform.deepseek.com/)
+
+```bash
+# 1. Clone & install
+git clone https://github.com/your-username/smartreview.git
+cd smartreview
+
+# 2. Backend
+python -m pip install -r requirements.txt
+cp .env.example .env          # edit .env → paste your DEEPSEEK_API_KEY
+python -m uvicorn smartreview_api:app --reload --port 8000
+
+# 3. Frontend
+cd web
+npm install
+npm run dev                   # http://localhost:5173
+```
+
+That's it. The backend auto-loads `.env` via `python-dotenv` — no manual `export` every session.
+
+<br>
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, TypeScript, Vite 6, Tailwind CSS 3 |
+| Animations | Framer Motion 11, Lucide React icons |
+| Backend | FastAPI, PyMuPDF, DeepSeek API |
+| Storage | JSON files (`data/`) — migrating to SQLite soon |
+| Linting | ESLint, Prettier (frontend) · Ruff (backend) |
+| Testing | pytest (12 tests), `npm run build` pass |
+
+<br>
+
+## 📁 Project Structure
 
 ```text
 SmartReview/
-├── smartreview.py              # V1 CLI tool
-├── smartreview_api.py          # V2 FastAPI backend (library, quiz, lecture tools, AI)
-├── questions/                  # V1 course data (used to bootstrap V2 on first run)
-├── data/                       # V2 library storage (generated at runtime; gitignored)
-├── tests/
-│   └── test_p0_backend.py      # Backend tests (pytest, 12 tests)
-├── web/                        # V2 Web UI (React + Vite + Tailwind)
+├── smartreview.py                # V1 CLI tool
+├── smartreview_api.py            # V2 FastAPI backend
+├── data/                         # Course storage (runtime, gitignored)
+├── tests/test_p0_backend.py       # 12 pytest tests
+├── web/                          # V2 React frontend
 │   ├── src/
-│   │   ├── api/                # API client (library, quiz)
-│   │   ├── components/         # UI components
-│   │   │   └── ui/             # Radix primitives
-│   │   ├── hooks/              # Quiz state hook (useQuiz)
-│   │   ├── lib/                # Utilities (cn)
-│   │   └── App.tsx             # Root layout + routing
-│   ├── package.json
-│   ├── tailwind.config.js
-│   └── vite.config.ts
-├── .env.example                # API key template → copy to .env
-├── requirements.txt
-├── TODO.md
+│   │   ├── api/                   # API clients (library, quiz)
+│   │   ├── components/            # UI components + Radix primitives
+│   │   ├── hooks/useQuiz.ts       # Quiz state machine
+│   │   └── App.tsx                # Root layout
+│   └── package.json
+├── .env.example                  # API key template
 ├── CHANGELOG.md
+├── TODO.md
 └── README.md
 ```
 
-## Data Format
+<br>
 
-V1 (CLI) reads `questions/<course>/questions.json`.
+## Config
 
-V2 (Web UI + API) persists the library to `data/` (one `course.json` per course). This directory is generated at runtime and intentionally not tracked by Git.
+| Env Variable | Default | Description |
+|-------------|---------|-------------|
+| `DEEPSEEK_API_KEY` | — | **Required** for AI generation |
+| `DEEPSEEK_MODEL` | `deepseek-v4-flash` | Model name |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | API endpoint |
+| `GEMINI_API_KEY` | — | Optional, for image chat |
+| `SMARTREVIEW_MAX_GENERATED_QUESTIONS` | `50` | Max per session |
 
-On API startup, if `data/` is empty, it will import legacy `questions/*/questions.json` once. Delete `data/` to re-bootstrap.
+See `.env.example` for the full list.
 
-Use one `questions.json` file per course directory. The file follows this structure:
+<br>
 
-```json
-{
-  "course_name": "COMP3251 - Algorithm Design",
-  "questions": [
-    {
-      "id": 1,
-      "type": "MCQ",
-      "question": "What is the time complexity of Prim's Algorithm using a Binary Heap?",
-      "options": {
-        "A": "O(V^2)",
-        "B": "O(E log V)",
-        "C": "O(E + V log V)",
-        "D": "O(V log E)"
-      },
-      "answer": "B",
-      "explanation": "Using a binary heap, each edge relaxation takes O(log V) time, and there are E relaxations."
-    }
-  ]
-}
-```
-
-Recommended folder layout:
-
-```text
-questions/
-    COMP3251 - Algorithm Design/
-        questions.json
-    Machine Learning/
-        questions.json
-```
-
----
-
-## V2 — Web UI
-
-A modern, responsive single-page app built with **React**, **Tailwind CSS**, and **Framer Motion**.
-
-### Features
-
-- **Course & chapter management** — create, rename, and delete courses and chapters directly from the sidebar.
-  - Hover over any course or chapter to reveal the ✏️ rename button and ··· context menu.
-  - Double-click a name to inline-edit.
-  - Use the `+ New Course` / `+ New Chapter` buttons to add content.
-  - Delete operations show a confirmation dialog to prevent accidents.
-- **Course navigation** — sidebar accordion lists all courses and their chapters with question counts.
-- **Focus mode** — hide the sidebar for a distraction-free experience. Press `Esc` or click the floating button to exit.
-- **Progress bar** — visual indicator of completion within the current course.
-- **Animated quiz card** — centered question display with smooth transitions between questions.
-- **Interactive options** — hover and selection effects, plus correctness feedback:
-  - Correct → green background + subtle bounce
-  - Incorrect → red background + horizontal shake
-- **Explanation panel** — slides in after submission, showing the correct answer and explanation.
-- **Multi-type questions** — supports MCQ, Fill-in-the-blank (FILL), Essay (ESSAY), and Proof (PROOF).
-  - FILL: numeric tolerance matching + text normalization.
-  - ESSAY/PROOF: reference answer reveal only (no auto-grading).
-- **Quiz setup** — before starting, choose course track (Auto / Humanities / STEM) and question counts per type.
-  - Auto-detection of course track via LLM based on uploaded materials.
-  - Daily-deterministic question sampling (same config → same questions on the same day).
-  - Auto gap-filling: if the question bank runs short, DeepSeek generates new questions from materials.
-- **Stats summary** — animated score ring, accuracy (MCQ+FILL only), duration, and correct count after completing a course.
-
-### Tech Stack
-
-| Layer       | Technology                          |
-|-------------|-------------------------------------|
-| Framework   | React 18 + TypeScript               |
-| Build       | Vite 6                              |
-| Styling     | Tailwind CSS 3                      |
-| Animations  | Framer Motion 11                    |
-| Icons       | Lucide React                        |
-
-### Color Scheme
-
-A soft indigo / slate palette designed for long study sessions with low eye strain:
-
-- Background: `slate-50`, cards: white with soft shadows
-- Primary: indigo-600 with violet gradients
-- Success: emerald, Error: rose
-- Custom `study` color scale in `tailwind.config.js`
-
-### Getting Started
+## 🧪 Quality
 
 ```bash
+# Backend
+python -m ruff check .                   # Lint
+python -m pytest tests/ -q               # Test (12 passed)
+
+# Frontend
 cd web
-npm install
-npm run dev      # starts dev server at http://localhost:5173
-npm run build    # production build to web/dist/
-
-# Quality checks
-npm run lint
-npm run format:check
-npm run format
+npm run lint                              # ESLint
+npm run format:check                      # Prettier
+npm run build                             # TypeScript + Vite build
 ```
 
-### Lecture Upload + MCQ + AI Chat (optional)
+<br>
 
-The Web UI includes a **Lecture notes** upload button (PDF → text via PyMuPDF) that automatically generates **MCQ questions** and imports them into the sidebar. If the lecture text contains a recognized course code, the questions are merged into that course; otherwise a new course is created.
+## 🗺️ Roadmap
 
-The AI chat box uses **DeepSeek** by default for text chat (`deepseek-v4-flash`). If you attach images (PPT slides), the backend will use **Gemini** for the multimodal request.
+| Priority | Item | Status |
+|----------|------|--------|
+| P0 | Multi-type questions (MCQ/FILL/ESSAY/PROOF) | done |
+| P0 | Quiz session with daily-deterministic sampling | done |
+| P0 | Course/chapter CRUD (sidebar management) | done |
+| P0 | Focus mode + keyboard shortcuts | done |
+| P0 | Deploy to production (Vercel + Railway) | next |
+| P1 | SQLite migration (replace JSON files) | planned |
+| P1 | Markdown rendering in questions | planned |
+| P1 | User authentication (simple token gate) | planned |
 
-1) Start the Python API server (in the repo root):
+Full roadmap: [TODO.md](TODO.md) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
-```bash
-python -m pip install -r requirements.txt
-python -m uvicorn smartreview_api:app --reload --port 8000
+<br>
 
-# Quality checks
-python -m ruff check .
-python -m pytest -q
-```
+## 📄 License
 
-2) Set your API keys (one-time setup):
-
-```bash
-cp .env.example .env
-# Edit .env and fill in your keys:
-#   DEEPSEEK_API_KEY=sk-xxxxxxxx
-#   (optional) GEMINI_API_KEY=...
-```
-
-The backend auto-loads `.env` via `python-dotenv` — no need to set env vars manually every session. `.env` is in `.gitignore`.
-
-3) Run the web dev server:
-
-```bash
-cd web
-npm run dev
-```
-
-Vite is configured to proxy `/api/*` to `http://127.0.0.1:8000` during development.
-
----
-
-## V1 — CLI
-
-Run the quiz from a course root directory:
-
-```bash
-python smartreview.py --data questions
-```
-
-Useful options:
-
-- `--course` to jump to a specific course.
-- `--order random` or `--order sequential` to control question order.
-- `--limit N` to review only the first N questions after ordering.
-- `--seed N` to make random order reproducible.
-
----
-
-## Future Extensions
-
-- Render Markdown in questions and explanations for formulas, code blocks, and links.
-- Import / export question sets via the Web UI.
-- Refactor backend into a package (`routers/`, `services/`, `storage/`, `llm/`).
-
-Full roadmap: see [TODO.md](TODO.md). Changelog: see [CHANGELOG.md](CHANGELOG.md).
+[AGPL v3](LICENSE) — free to use and modify; if you deploy it publicly you must share your changes.
