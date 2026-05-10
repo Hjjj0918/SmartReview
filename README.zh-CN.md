@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/license-AGPL_v3-blue" alt="License AGPLv3">
   <img src="https://img.shields.io/badge/tests-12%20passed-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/status-active-success" alt="Status">
   <img src="https://img.shields.io/badge/PRs-welcome-blue" alt="PRs Welcome">
@@ -194,4 +194,4 @@ npm run build                             # TypeScript + Vite 构建
 
 ## 📄 许可证
 
-[MIT](LICENSE) — 随意使用、Fork、部署。
+[AGPL v3](LICENSE) — 自由使用和修改；公开部署必须开源你的改动。

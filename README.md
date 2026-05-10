@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/license-AGPL_v3-blue" alt="License AGPLv3">
   <img src="https://img.shields.io/badge/tests-12%20passed-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/status-active-success" alt="Status">
   <img src="https://img.shields.io/badge/PRs-welcome-blue" alt="PRs Welcome">
@@ -194,4 +194,4 @@ Full roadmap: [TODO.md](TODO.md) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
 ## 📄 License
 
-[MIT](LICENSE) — use it, fork it, ship it.
+[AGPL v3](LICENSE) — free to use and modify; if you deploy it publicly you must share your changes.
