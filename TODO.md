@@ -72,6 +72,78 @@
 
 ---
 
+## P0 — 部署上线 (Deployment to Production)
+
+> 目标：将 SmartReview 从 localhost 部署到公网，采用 PaaS 路线（Vercel + Railway），低成本、免运维。
+
+### D1: 域名 + 环境准备
+
+- [ ] D1.1 **购买域名**（Namecheap / Cloudflare / 阿里云万网，约 ¥50-80/年）
+  - 建议用 `.com` / `.app` / `.dev`，简短好记
+  - **为什么**：公网访问必须有一个域名；Vercel + Railway 都支持免费绑定自定义域名 + 自动 HTTPS
+- [ ] D1.2 **注册 Railway 账号**（[railway.app](https://railway.app)），绑定 GitHub
+- [ ] D1.3 **注册 Vercel 账号**（[vercel.com](https://vercel.com)），绑定 GitHub
+- [ ] D1.4 **将域名 DNS 托管到 Cloudflare**（免费、CDN 加速、DDoS 防护）
+  - **为什么**：无论域名在哪买，DNS 用 Cloudflare 可以获得免费 CDN + SSL + 安全防护
+
+### D2: 后端部署（Railway）
+
+- [ ] D2.1 **创建 `Dockerfile`**（后端容器化）
+  - **为什么**：Railway 用 Docker 部署 Python 应用；Dockerfile 保证环境一致性
+- [ ] D2.2 **添加 `Procfile` 或 `railway.toml`**（Railway 配置）
+  - 指定启动命令 `uvicorn smartreview_api:app --host 0.0.0.0 --port $PORT`
+  - 声明持久化 Volume 挂载 `data/` 目录
+  - **为什么**：Railway 需要知道怎么启动 + 哪些目录需要持久化（Volume 防止重启丢数据）
+- [ ] D2.3 **在 Railway 设置环境变量**：`DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL` 等
+  - **为什么**：密钥绝不放入 Git；Railway 的环境变量管理比 `.env` 更适合生产环境
+- [ ] D2.4 **Railway 项目创建 + GitHub 自动部署**
+  - Push 到 GitHub → Railway 自动构建 Docker → 自动上线
+  - **为什么**：CI/CD 自动化，之后每次 `git push` 就自动更新
+- [ ] D2.5 **绑定自定义域名**（如 `api.smartreview.app`）
+  - 在 Railway Dashboard → Settings → Custom Domain 添加
+  - Cloudflare DNS 添加 CNAME 记录指向 Railway 提供的域名
+  - **为什么**：`api.yourdomain.com` 比 `xxx.railway.app` 更专业，且方便前后端分离
+
+### D3: 前端部署（Vercel）
+
+- [ ] D3.1 **创建 `web/vercel.json`**（Vercel 部署配置）
+  - 指定 build 命令和 output 目录
+  - 配置 SPA fallback（所有路由 → index.html）
+  - 配置 API proxy（开发时用 Vite proxy，生产时需单独处理跨域）
+  - **为什么**：Vercel 需要知道这是一个 SPA；SPA fallback 让前端路由正常工作
+- [ ] D3.2 **更新前端 API 请求地址**（区分开发/生产环境）
+  - 开发环境：`/api/` → Vite proxy → `localhost:8000`
+  - 生产环境：`https://api.smartreview.app/` → 直接请求 Railway
+  - **为什么**：开发和生产环境需要不同 API 地址；硬编码会导致部署后 API 请求失败
+- [ ] D3.3 **Vercel 项目创建 + GitHub 自动部署**
+  - Import GitHub 仓库 → 设置 Root Directory 为 `web/` → 自动部署
+  - **为什么**：与 Railway 一样，push 即部署
+- [ ] D3.4 **绑定主域名**（如 `smartreview.app`）
+  - Vercel Dashboard → Domains → 添加自定义域名
+  - Cloudflare DNS 添加 CNAME 指向 `cname.vercel-dns.com`
+
+### D4: 前后端连通 + 跨域
+
+- [ ] D4.1 **后端添加 CORS 白名单**（生产域名）
+  - 当前 CORS 只允许 `localhost:5173`；需添加 `https://smartreview.app`
+  - **为什么**：浏览器同源策略会拦截不同域名之间的 API 请求
+- [ ] D4.2 **端到端验证**：浏览器访问 `https://smartreview.app` → 选择课程 → 生成题目 → 做题 → 查看统计
+  - **为什么**：确保部署后一切正常工作
+
+### D5: 生产加固
+
+- [ ] D5.1 **后端添加 Token 保护**（简单口令或 GitHub OAuth）
+  - 不需要完整用户系统，但加一个简单密码防止路人消耗你的 DeepSeek API 额度
+  - **为什么**：你的 DeepSeek API key 按量计费，公开后任何人都能调用 → 费用失控
+- [ ] D5.2 **Railway 设置月度费用告警**（如 $10/月上限）
+  - **为什么**：防止意外的高额账单
+- [ ] D5.3 **设置 `robots.txt`**（禁止搜索引擎爬取）
+  - 如果不想被搜索引擎索引
+- [ ] D5.4 **添加 Uptime 监控**（Railway 自带或免费 UptimeRobot）
+  - **为什么**：服务挂了你能第一时间知道
+
+---
+
 ### P0 — Reliability & DX (short-term)
 
 - [x] Add `.env.example` listing required env vars
